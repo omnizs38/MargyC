@@ -294,7 +294,8 @@ def patch_resources(dec):
     # настройки сборки из config.json: приложение читает их отсюда
     (dec / "res/values/clawdio_config.xml").write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
-        f'    <string name="clawdio_config">{xml_text(config_resource())}</string>\n</resources>\n')
+        f'    <string name="clawdio_config">{xml_text(config_resource())}</string>\n</resources>\n',
+        encoding="utf-8")
 
     # apktool превращает размеченные plurals (<annotation role="verb">) в простой текст с &lt;...>,
     # и в приложении теги видны буквами. Возвращаем настоящие теги во всех языках.

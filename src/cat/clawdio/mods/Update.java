@@ -382,7 +382,9 @@ final class Update {
     }
 
     static String fetch(String url) throws Exception {
-        return new String(download(url), "UTF-8");
+        String text = new String(download(url), "UTF-8");
+        // сервер может отдать файл с BOM — JSON-парсер его не переживёт
+        return text.startsWith("\uFEFF") ? text.substring(1) : text;
     }
 
     static byte[] download(String url) throws Exception {

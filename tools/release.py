@@ -155,9 +155,7 @@ def commit_files(files, branch, message):
         git("fetch", "origin", branch)
         parent = f"origin/{branch}"
     except patcher.PatchError:
-        parent = None
-    if parent is None:
-        parent = git("rev-parse", "HEAD")
+        parent = None  # ветки канала ещё нет — начинаем с пустого дерева
 
     with tempfile.TemporaryDirectory() as tmp:
         index = pathlib.Path(tmp) / "index"
@@ -165,11 +163,10 @@ def commit_files(files, branch, message):
         run = lambda *args: subprocess.run(["git", *args], cwd=ROOT, env=env, stdout=subprocess.PIPE,
                                             stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                             errors="replace", check=True)
-        try:
+        if parent:
             run("read-tree", parent)
-        except subprocess.CalledProcessError:
+        else:
             run("read-tree", "--empty")
-            parent = None
         for name, path in files.items():
             blob = subprocess.run(["git", "hash-object", "-w", str(path)], cwd=ROOT, stdout=subprocess.PIPE,
                                   text=True, encoding="utf-8", check=True).stdout.strip()
