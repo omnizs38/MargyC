@@ -1459,6 +1459,8 @@ def main():
     ap.add_argument("--work", help="рабочая папка (по умолчанию временная)")
     ap.add_argument("--keep", action="store_true", help="не удалять рабочую папку")
     ap.add_argument("--config", help="файл настроек сборки (по умолчанию config.json)")
+    ap.add_argument("--check", action="store_true",
+                    help="только проверить: найти все хуки и показать, что сломалось (сборка не делается)")
     a = ap.parse_args()
 
     load_config(a.config)
@@ -1478,19 +1480,39 @@ def main():
         patch_resources(dec)
         patch_icons(dec)
         sm = Smali(dec)
-        patch_install_source(sm)
-        patch_crash_log(sm, app)
-        names = patch_drawer(sm)
-        patch_translate(sm)
-        patch_prompt(sm)
-        patch_rest_body(sm)
-        patch_account(sm)
-        log("  шрифты: Typeface.Builder(assets) %d, вызовов %d" % patch_fonts(sm))
-        names.update(patch_models(sm))
-        names.update(find_clawd(sm))
-        names.update(patch_chat_menu(sm, dec))
-        patch_google_login(sm, dec, names["FUNCTION0"])
-        palettes = patch_theme(sm)
+        names = {}
+        # Каждый хук — отдельный шаг: в режиме --check не падаем на первом, а смотрим все.
+        steps = [
+            ("источник установки", lambda: patch_install_source(sm)),
+            ("журнал вылетов", lambda: patch_crash_log(sm, app)),
+            ("пункт в меню", lambda: names.update(patch_drawer(sm))),
+            ("переводы", lambda: patch_translate(sm)),
+            ("системный промпт", lambda: patch_prompt(sm)),
+            ("тело запроса", lambda: patch_rest_body(sm)),
+            ("аккаунт", lambda: patch_account(sm)),
+            ("шрифты", lambda: log("  шрифты: Typeface.Builder(assets) %d, вызовов %d" % patch_fonts(sm))),
+            ("модели", lambda: names.update(patch_models(sm))),
+            ("Clawd", lambda: names.update(find_clawd(sm))),
+            ("меню чата", lambda: names.update(patch_chat_menu(sm, dec))),
+            ("вход через Google", lambda: patch_google_login(sm, dec, names["FUNCTION0"])),
+            ("темы", lambda: names.update(patch_theme(sm))),
+        ]
+        broken = []
+        for title, step in steps:
+            try:
+                step()
+            except Exception as e:
+                broken.append((title, str(e) if isinstance(e, PatchError) else repr(e)))
+                if not a.check:
+                    raise
+                log(f"  ! {title}: {broken[-1][1]}")
+        if a.check:
+            report(broken)
+            if broken:
+                sys.exit(1)
+            log("все хуки нашлись — можно собирать")
+            return
+        palettes = names
         log(f"  перенесено пропатченных классов: {move_patched(sm)}")
         limit_abi(dec, a.abi)
         for k, v in names.items():
@@ -1511,6 +1533,20 @@ def main():
     finally:
         if not a.keep and not a.work:
             shutil.rmtree(work, ignore_errors=True)
+
+
+def report(broken):
+    """Итог режима --check: что нашлось и что сломалось."""
+    print()
+    print("=" * 60)
+    print("Совместимость с этой версией Claude:")
+    if not broken:
+        print("  все хуки нашлись")
+    for title, err in broken:
+        print(f"  НЕ НАЙДЕНО: {title}")
+        print(f"      {err}")
+    print("=" * 60)
+    print("Скопируй этот список в issue: https://github.com/omnizs38/MargyC/issues")
 
 
 if __name__ == "__main__":

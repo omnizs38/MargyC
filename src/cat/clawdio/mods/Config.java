@@ -131,6 +131,17 @@ final class Config {
         return str("maintainer", "");
     }
 
+    /**
+     * Код версии Claude, на котором эта сборка проверена. Если у пользователя Claude новее —
+     * мод может работать не как задумано, и приложение предупредит об этом.
+     */
+    static long claudeTested() {
+        try {
+            return json().optLong("claude_tested", 0L);
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
     static String maintainerUrl() {
         return str("maintainer_url", "");
     }

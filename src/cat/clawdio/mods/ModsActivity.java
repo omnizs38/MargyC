@@ -1926,8 +1926,61 @@ public final class ModsActivity extends Activity {
         server.chevron();
         server.setOnClickListener(v -> chooseServer());
         g.addView(server);
+        Ui.Row compat = ui.new Row(L.t("Совместимость с Claude"), claudeStatus());
+        compat.icon(IC_UPDATE);
+        compat.chevron();
+        compat.setOnClickListener(v -> claudeSheet());
+        g.addView(compat);
         ui.restyle(g);
         return g;
+    }
+
+    /** Коротко: совпадает ли версия Claude с проверенной. */
+    static String claudeStatus() {
+        long tested = Config.claudeTested();
+        long code = Mods.claudeVersionCode();
+        if (tested <= 0 || code <= 0) {
+            return L.t("Неизвестно");
+        }
+        return code > tested ? L.t("Claude новее, чем проверено") : L.t("В порядке");
+    }
+
+    /**
+     * Предупреждение, если Claude обновился после сборки: часть хуков могла не найти своё
+     * место. Отсюда же отчёт для issue: версии и журнал.
+     */
+    private void claudeSheet() {
+        long tested = Config.claudeTested();
+        long code = Mods.claudeVersionCode();
+        boolean newer = tested > 0 && code > tested;
+        StringBuilder sb = new StringBuilder();
+        sb.append(L.t("Claude: ")).append(Mods.claudeVersionName()).append(" (").append(code).append(")\n");
+        sb.append(L.t("Сборка: ")).append(Config.brand()).append(" ").append(Mods.label()).append("\n");
+        sb.append(L.t("Проверено на Claude: ")).append(tested).append("\n\n");
+        if (newer) {
+            sb.append(L.t("Claude обновился после этой сборки. Мод может работать не как задумано: "
+                    + "если что-то сломалось — пришли отчёт, поправим.")).append("\n\n");
+        } else {
+            sb.append(L.t("Всё в порядке: сборка проверена на этой версии Claude.")).append("\n\n");
+        }
+        sb.append(L.t("Отчёт: журнал и версии — можно скопировать и отправить в issue."));
+
+        final TextView body = ui.label(sb.toString(), 15, ui.text, ui.regular);
+        body.setLineSpacing(ui.dp(4), 1f);
+        body.setTextIsSelectable(true);
+        Ui.Sheet sheet = ui.new Sheet(L.t("Совместимость с Claude")).view(body);
+        sheet.button(L.t("Скопировать отчёт"), false, () -> {
+            String report = "Clawdio " + Mods.label() + ", Claude " + Mods.claudeVersionName()
+                    + " (" + Mods.claudeVersionCode() + "), Android "
+                    + android.os.Build.VERSION.RELEASE + "\n\n" + Journal.report();
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(ClipData.newPlainText("Clawdio report", report));
+            Toast.makeText(this, L.t("Скопировано"), Toast.LENGTH_SHORT).show();
+        });
+        if (!github().isEmpty()) {
+            sheet.button(L.t("Сообщить об ошибке"), false, () -> open(github() + "/issues/new"));
+        }
+        sheet.button(L.t("Закрыть"), true, null).show();
     }
 
     /**

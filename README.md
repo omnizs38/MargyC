@@ -49,6 +49,7 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 | 🎮 **Clawd widget & game** | a home screen widget with Clawd and today's messages; a mini-game where Clawd jumps over bugs |
 | 🧩 **Custom mods** | install `.mcmod` plugins: compiled dex with a manifest, settings drawn by the app, or pick one from the built-in catalog. [Write your own](docs/plugins.md) |
 | 🔄 **Updates** | Clawdio checks for new versions itself, downloads the APK and checks its signature before offering it; turn on the beta channel to get betas first |
+| 🧭 **Claude compatibility** | if Claude updates under the mod, the Mods screen says so and copies a report with versions and the journal — send it and it gets fixed |
 | 🌐 **Russian or English** | the Mods screen follows the app language |
 | 💥 **Crash log & journal** | if the app crashes, the next start shows the stack trace; the Clawdio journal at the bottom of the Mods screen shows what the hooks did, to copy and send |
 
@@ -86,6 +87,14 @@ The input is the original Claude as XAPK / APKS / APKM, a folder of splits or an
 The patcher finds every hook by strings and signatures (kotlinx.serialization descriptors,
 `toString()` of data classes, Compose internals), not by obfuscated names, so it has a chance to
 survive Claude updates — and when it cannot find something, it says exactly what.
+
+To see what broke without building anything:
+
+```sh
+python3 patcher.py com.anthropic.claude_<version>.xapk --check
+```
+
+It prints every hook it found and every one it could not find — the work list for a new Claude.
 
 **Brand, package and channel come from [`config.json`](config.json)** — no code edits needed to
 build your own variant: `python3 patcher.py input.xapk --config my-config.json`.

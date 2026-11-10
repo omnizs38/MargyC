@@ -48,8 +48,10 @@ public final class Mods {
     /** Application.onCreate, сразу после CrashLog: питомец и свои моды. */
     public static void init(android.app.Application app) {
         try {
-            String claude = app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
-            Journal.log("start: Clawdio " + label() + ", Claude " + claude + ", Android " + Build.VERSION.RELEASE
+            readClaudeVersion(app);
+            String claude = claudeVersionName();
+            Journal.log("start: Clawdio " + label() + ", Claude " + claude
+                    + " (" + claudeVersionCode() + "), Android " + Build.VERSION.RELEASE
                     + " (API " + Build.VERSION.SDK_INT + "), " + Build.MANUFACTURER + " " + Build.MODEL);
             app.registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
                 @Override
@@ -191,6 +193,41 @@ public final class Mods {
     static Context app() throws Exception {
         Class<?> at = Class.forName("android.app.ActivityThread");
         return (Context) at.getMethod("currentApplication").invoke(null);
+    }
+
+    private static String claudeName;
+    private static long claudeCode;
+
+    /** Версия Claude, поверх которой работает мод: имя и код версии из манифеста. */
+    static synchronized void readClaudeVersion(android.content.Context ctx) {
+        try {
+            android.content.pm.PackageInfo pi = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0);
+            claudeName = pi.versionName;
+            claudeCode = pi.getLongVersionCode();
+        } catch (Throwable t) {
+            claudeName = "";
+        }
+    }
+
+    static String claudeVersionName() {
+        if (claudeName == null) {
+            try {
+                readClaudeVersion(app());
+            } catch (Exception ignored) {
+            }
+        }
+        return claudeName == null ? "" : claudeName;
+    }
+
+    static long claudeVersionCode() {
+        if (claudeName == null) {
+            try {
+                readClaudeVersion(app());
+            } catch (Exception ignored) {
+            }
+        }
+        return claudeCode;
     }
 
     /** Per-app язык есть только с Android 13 (API 33). */

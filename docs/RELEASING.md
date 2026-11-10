@@ -28,6 +28,9 @@ Everything here is scripted; no manual steps, no secrets in the repository.
 ## A release
 
 ```sh
+# 0. check first: find every hook and see what broke, without building
+python3 patcher.py com.anthropic.claude_26100220.xapk --check
+
 # 1. build from the current Claude
 python3 tools/release.py build com.anthropic.claude_26100220.xapk -o Clawdio.apk
 
@@ -39,6 +42,14 @@ python3 tools/release.py publish Clawdio.apk --notes "Что нового" --rel
 # 4. check that the channel matches the sources
 python3 tools/release.py check
 ```
+
+`--check` runs the patch phase and stops: it prints every hook it found and every one it could
+not find, without building or signing. Use it when Claude updates — it turns "the patcher broke"
+into a list of the exact places to repair, and that list is what belongs in an issue.
+
+After a successful build, put the version code of the Claude you built against into
+`config.json` (`claude_tested`): the app compares it with the installed Claude and warns users
+when Claude has moved on.
 
 `publish` writes the version, the SHA-256 of the APK and the file size into `version.json`:
 
@@ -84,10 +95,14 @@ Before an update is offered, the app checks the APK:
 The patcher looks for hooks by strings and signatures, so it survives most updates — but not all.
 When it fails, it says exactly what it could not find.
 
-1. Take the new Claude XAPK and run `python3 tools/release.py build new.xapk -o Clawdio.apk`.
+1. Take the new Claude XAPK and run `python3 patcher.py new.xapk --check` — the list of missing
+   hooks is the work list.
 2. If the patcher fails, the error names the missing hook. Fix it in `patcher.py` (the `patch_*`
-   functions) and build again.
-3. Bump `VERSION` in `Mods.java`, then `publish` and `check`.
+   functions) and check again.
+3. Bump `VERSION` in `Mods.java`, put the new Claude's version code into `claude_tested` in
+   `config.json`, then `publish` and `check`.
 
 Users on the new Claude version can send the journal (*Mods → Journal*) — it lists the Claude
-version the app started with and what every hook did.
+version the app started with and what every hook did. *Mods → Claude compatibility* shows the
+same information as a warning when the installed Claude is newer than the tested one, and copies a
+ready-to-send report.

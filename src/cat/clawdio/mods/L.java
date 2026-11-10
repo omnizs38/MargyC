@@ -343,6 +343,23 @@ final class L {
         put("Не получилось скачать: ", "Couldn't download: ");
         put("Сборка ещё не появилась в канале. Попробуй через минуту.",
                 "The build hasn't reached the channel yet. Try again in a minute.");
+        put("Совместимость с Claude", "Claude compatibility");
+        put("Неизвестно", "Unknown");
+        put("Claude новее, чем проверено", "Claude is newer than tested");
+        put("В порядке", "Fine");
+        put("Claude: ", "Claude: ");
+        put("Сборка: ", "Build: ");
+        put("Проверено на Claude: ", "Tested against Claude: ");
+        put("Claude обновился после этой сборки. Мод может работать не как задумано: "
+                        + "если что-то сломалось — пришли отчёт, поправим.",
+                "Claude was updated after this build. The mod may not work as intended: "
+                        + "if something broke, send the report and we'll fix it.");
+        put("Всё в порядке: сборка проверена на этой версии Claude.",
+                "All good: this build was tested on this version of Claude.");
+        put("Отчёт: журнал и версии — можно скопировать и отправить в issue.",
+                "Report: the journal and the versions — copy it and send it in an issue.");
+        put("Скопировать отчёт", "Copy report");
+        put("Сообщить об ошибке", "Report a problem");
         put("Не получилось открыть установщик", "Couldn't open the installer");
         // 1.3
         put(" дн.", " days");
