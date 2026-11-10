@@ -422,6 +422,7 @@ final class Update {
         c.setConnectTimeout(15000);
         c.setReadTimeout(30000);
         c.setUseCaches(false);
+        c.setRequestProperty("User-Agent", "Clawdio/" + Mods.VERSION); // API GitHub требует заголовок
         if (accept != null) {
             c.setRequestProperty("Accept", accept);
         }
