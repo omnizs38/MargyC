@@ -98,6 +98,8 @@ public final class ModsActivity extends Activity {
         content.addView(linksGroup(), gap2);
         content.addView(ui.sectionTitle(L.t("Поддержать автора")));
         content.addView(donateGroup());
+        content.addView(ui.sectionTitle(L.t("О проекте")));
+        content.addView(aboutGroup());
         content.addView(ui.sectionTitle(L.t("Журнал")));
         content.addView(journalGroup());
 
@@ -1534,17 +1536,17 @@ public final class ModsActivity extends Activity {
      * Реквизиты для донатов. По условиям лицензии (LICENSE, раздел «Additional terms») реквизиты
      * автора нельзя убирать, менять или прятать — свои можно добавить рядом, но не вместо.
      */
-    static String DONATE_CARD() {
+    static String donateCard() {
         return Config.authorCard();
     }
 
-    static String DONATE_YOOMONEY() {
+    static String donateYoomoney() {
         return Config.authorYoomoney();
     }
 
     private View donateGroup() {
         LinearLayout g = ui.column();
-        String card = DONATE_CARD();
+        String card = donateCard();
         if (!card.isEmpty()) {
             Ui.Row row = ui.new Row(L.t("Перевод на карту"), prettyCard(card));
             row.icon(IC_CARD);
@@ -1555,7 +1557,7 @@ public final class ModsActivity extends Activity {
             });
             g.addView(row);
         }
-        String yoo = DONATE_YOOMONEY();
+        String yoo = donateYoomoney();
         if (!yoo.isEmpty()) {
             Ui.Row row = ui.new Row(L.t("ЮMoney"), L.t("Донат через ЮMoney, картой любого банка."));
             row.icon(IC_DONATE);
@@ -1569,6 +1571,13 @@ public final class ModsActivity extends Activity {
         license.chevron();
         license.setOnClickListener(v -> open(github() + "/blob/main/LICENSE"));
         g.addView(license);
+        ui.restyle(g);
+        return g;
+    }
+
+    /** О проекте и поддержка этой сборки. */
+    private View aboutGroup() {
+        LinearLayout g = ui.column();
         Ui.Row about = ui.new Row(L.t("О проекте"), L.t("Автор, форк, лицензия и ссылки."));
         about.icon(IC_INFO);
         about.chevron();
