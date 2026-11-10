@@ -236,6 +236,24 @@ def sub_once(text, pattern, repl, what, flags=0):
 
 # ---------------------------------------------------------------- патчи
 
+def patch_layouts(dec):
+    """Обфусцированные имена ресурсов: атрибут srcCompat из appcompat не резолвится (имя потеряно
+    в R8); его заменяем ID атрибута из того же значения (?APKTOOL_DUMMYVAL_0x...). aapt грузит атрибут
+    по ID, имя здесь только синтаксический заполнитель."""
+    for f in (dec / "res/layout").glob("*.xml"):
+        s = f.read_text()
+        if "app:srcCompat=" not in s:
+            continue
+        m = re.search(r'app:srcCompat="\?([A-Za-z0-9_.]+)"', s)
+        if not m:
+            log(f"  layout {f.name}: srcCompat не распознан, пропущено")
+            continue
+        s = s.replace("app:srcCompat=\"?" + m.group(1) + "\"",
+                      "app:" + m.group(1) + "=\"?" + m.group(1) + "\"")
+        f.write_text(s, encoding="utf-8")
+        log(f"  layout {f.name}: srcCompat → {m.group(1)}")
+
+
 def patch_manifest(dec):
     m = dec / "AndroidManifest.xml"
     s = m.read_text()
@@ -1616,6 +1634,7 @@ def main():
 
         log("патчи")
         app = patch_manifest(dec)
+        patch_layouts(dec)
         patch_resources(dec)
         patch_icons(dec)
         sm = Smali(dec)
