@@ -5,14 +5,14 @@ import android.app.Application;
 import android.os.Bundle;
 import android.widget.Toast;
 
-import cat.narezany.mods.api.MargyCPlugin;
-import cat.narezany.mods.api.PluginContext;
+import cat.clawdio.mods.api.ClawdioPlugin;
+import cat.clawdio.mods.api.PluginContext;
 
-/** Example MargyC mod: settings, hidden prompt context and an activity callback. */
-public final class HelloMod implements MargyCPlugin {
+/** Example Clawdio mod: settings, hidden prompt context and an activity callback. */
+public final class HelloMod implements ClawdioPlugin {
     @Override
     public void onCreate(final PluginContext ctx) {
-        ctx.log("hello from " + ctx.id() + ", MargyC " + ctx.margycVersion());
+        ctx.log("hello from " + ctx.id() + ", Clawdio " + ctx.clawdioVersion());
 
         // Hidden context for every message: Claude sees it, the chat does not.
         ctx.addPromptContext(() -> {
@@ -35,7 +35,7 @@ public final class HelloMod implements MargyCPlugin {
 
                 @Override
                 public void onActivityResumed(Activity a) {
-                    if (!shown && !a.getClass().getName().startsWith("cat.narezany.mods.")) {
+                    if (!shown && !a.getClass().getName().startsWith("cat.clawdio.mods.")) {
                         shown = true;
                         Toast.makeText(a, greeting, Toast.LENGTH_SHORT).show();
                     }

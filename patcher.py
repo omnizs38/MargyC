@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Патчер MargyC: из обычного XAPK Claude собирает один подписанный APK мода.
+"""Патчер Clawdio: из обычного XAPK Claude собирает один подписанный APK мода.
 
-    python3 patcher.py com.anthropic.claude_26100220.xapk -o MargyC.apk
+    python3 patcher.py com.anthropic.claude_26100220.xapk -o Clawdio.apk
 
 Нужны Python 3.8+ и Java 17+. Инструменты (apktool, APKEditor, d8, uber-apk-signer,
 android.jar) скачиваются сами в ~/.cache/claude-mods при первом запуске.
@@ -12,13 +12,17 @@ android.jar) скачиваются сами в ~/.cache/claude-mods при пе
   3. патчи манифеста, ресурсов и smali (ниже, функции patch_*);
   4. apktool b;
   5. сборка кода мода (src/) в отдельный classesN.dex;
-  6. zipalign + подпись ключом (MARGYC_KEYSTORE или keystore/narezany.jks, в git его нет).
+  6. zipalign + подпись ключом (CLAWDIO_KEYSTORE или keystore/clawdio.jks, в git его нет).
+
+Бренд, пакет, канал обновлений и реквизиты автора лежат в config.json (свой файл — --config).
+Собрать чужую сборку можно, не правя код.
 
 Обфусцированные имена классов меняются от версии к версии, поэтому патчи ищут места
 вставки по строкам и сигнатурам (toString data-классов, имена полей kotlinx.serialization),
 а не по именам. Если что-то не нашлось, патчер падает с понятной ошибкой.
 """
 import argparse
+import json
 import os
 import pathlib
 import re
@@ -30,11 +34,41 @@ import urllib.request
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
-NEW_PACKAGE = "cat.narezany.claude"
+DEFAULT_CONFIG = HERE / "config.json"
 OLD_PACKAGE = "com.anthropic.claude"
-APP_NAME = "MargyC"
 ICON_BACKGROUND = "#ff8fd2b1"
-MOD = "Lcat/narezany/mods/"
+MOD = "Lcat/clawdio/mods/"
+
+# Настройки сборки лежат в config.json: бренд, пакет, канал обновлений, автор и реквизиты.
+# Свой файл — через --config, так любой форк собирает свою сборку, не правя код.
+CONFIG = {}
+NEW_PACKAGE = "cat.clawdio.claude"
+APP_NAME = "Clawdio"
+
+
+def load_config(path=None):
+    """Читает config.json (или --config) и ставит бренд, пакет и прочие настройки сборки."""
+    global CONFIG, NEW_PACKAGE, APP_NAME
+    p = pathlib.Path(path) if path else DEFAULT_CONFIG
+    if p.exists():
+        CONFIG = json.loads(p.read_text(encoding="utf-8"))
+    else:
+        CONFIG = {}
+    NEW_PACKAGE = CONFIG.get("package") or "cat.clawdio.claude"
+    APP_NAME = CONFIG.get("brand") or "Clawdio"
+    return CONFIG
+
+
+def config_resource():
+    """Содержимое config.json как строка-ресурс: приложение читает его при старте."""
+    return json.dumps(CONFIG, ensure_ascii=False, sort_keys=True)
+
+
+def xml_text(value):
+    """Строка для Android-ресурса: кавычки и спецсимволы экранируются."""
+    return (value.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace("\n", "\\n"))
 
 TOOLS = {
     "apktool.jar": "https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar",
@@ -44,11 +78,11 @@ TOOLS = {
 }
 PLATFORM_ZIP = "https://dl.google.com/android/repository/platform-35_r02.zip"
 
-# Ключ подписи не лежит в репозитории: с ним кто угодно подпишет «обновление», которое встанет поверх MargyC.
-# Свой ключ — в keystore/ (в .gitignore) или по пути из MARGYC_KEYSTORE.
-KEYSTORE = pathlib.Path(os.environ.get("MARGYC_KEYSTORE", HERE / "keystore" / "narezany.jks"))
-KEY_ALIAS = os.environ.get("MARGYC_KEY_ALIAS", "narezany")
-KEY_PASS = os.environ.get("MARGYC_KEY_PASS", "narezany")
+# Ключ подписи не лежит в репозитории: с ним кто угодно подпишет «обновление», которое встанет поверх Clawdio.
+# Свой ключ — в keystore/ (в .gitignore) или по пути из CLAWDIO_KEYSTORE.
+KEYSTORE = pathlib.Path(os.environ.get("CLAWDIO_KEYSTORE", HERE / "keystore" / "clawdio.jks"))
+KEY_ALIAS = os.environ.get("CLAWDIO_KEY_ALIAS", "clawdio")
+KEY_PASS = os.environ.get("CLAWDIO_KEY_PASS", "clawdio")
 
 
 class PatchError(Exception):
@@ -189,23 +223,25 @@ def patch_manifest(dec):
     s = s.replace(f'android:taskAffinity="{OLD_PACKAGE}.assist"', f'android:taskAffinity="{NEW_PACKAGE}.assist"')
     activities = (
         '        <activity android:exported="false" android:label="Моды" '
-        'android:name="cat.narezany.mods.ModsActivity" '
+        'android:name="cat.clawdio.mods.ModsActivity" '
         'android:theme="@android:style/Theme.DeviceDefault.DayNight"/>\n'
-        '        <activity android:exported="false" android:name="cat.narezany.mods.ThemeActivity" '
+        '        <activity android:exported="false" android:name="cat.clawdio.mods.ThemeActivity" '
         'android:theme="@android:style/Theme.DeviceDefault.DayNight"/>\n'
-        '        <activity android:exported="false" android:name="cat.narezany.mods.CrashActivity" '
+        '        <activity android:exported="false" android:name="cat.clawdio.mods.CrashActivity" '
         'android:theme="@android:style/Theme.DeviceDefault"/>\n'
         '        <activity android:exported="false" android:excludeFromRecents="true" '
-        'android:name="cat.narezany.mods.InfoActivity" '
+        'android:name="cat.clawdio.mods.InfoActivity" '
         'android:theme="@android:style/Theme.Translucent.NoTitleBar"/>\n'
-        '        <activity android:exported="false" android:name="cat.narezany.mods.GameActivity" '
+        '        <activity android:exported="false" android:name="cat.clawdio.mods.GameActivity" '
         'android:screenOrientation="unspecified" '
         'android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>\n'
-        '        <receiver android:exported="true" android:label="Clawd" android:name="cat.narezany.mods.Widget">\n'
+        '        <receiver android:exported="true" android:label="Clawd" android:name="cat.clawdio.mods.Widget">\n'
         '            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>\n'
-        '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/margyc_widget_info"/>\n'
-        '        </receiver>\n')
-    if "cat.narezany.mods.ModsActivity" not in s:
+        '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/clawdio_widget_info"/>\n'
+        '        </receiver>\n'
+        '        <provider android:exported="false" android:name="cat.clawdio.mods.ApkProvider" '
+        f'android:authorities="{NEW_PACKAGE}.files" android:grantUriPermissions="true"/>\n')
+    if "cat.clawdio.mods.ModsActivity" not in s:
         s = sub_once(s, r"(\n\s*</application>)", "\n" + activities.rstrip("\n") + r"\1", "манифест")
     m.write_text(s)
 
@@ -242,11 +278,11 @@ def patch_resources(dec):
         f'    <path android:fillColor="{ICON_BACKGROUND}" android:pathData="M0,0h108v108h-108z" />\n'
         '</vector>\n')
 
-    # свои файлы мода (картинка пасхалки) -> assets/margyc/
+    # свои файлы мода (картинка пасхалки) -> assets/clawdio/
     if (HERE / "app-assets").exists():
-        (dec / "assets/margyc").mkdir(parents=True, exist_ok=True)
+        (dec / "assets/clawdio").mkdir(parents=True, exist_ok=True)
         for f in (HERE / "app-assets").iterdir():
-            shutil.copy(f, dec / "assets/margyc" / f.name)
+            shutil.copy(f, dec / "assets/clawdio" / f.name)
 
     # переводы (values-*) и свои ресурсы: виджет (layout, xml, drawable, color)
     for src in sorted(d for d in (HERE / "res").iterdir() if d.is_dir()):
@@ -254,6 +290,11 @@ def patch_resources(dec):
         dst.mkdir(exist_ok=True)
         for f in src.glob("*.xml"):
             shutil.copy(f, dst / f.name)
+
+    # настройки сборки из config.json: приложение читает их отсюда
+    (dec / "res/values/clawdio_config.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+        f'    <string name="clawdio_config">{xml_text(config_resource())}</string>\n</resources>\n')
 
     # apktool превращает размеченные plurals (<annotation role="verb">) в простой текст с &lt;...>,
     # и в приложении теги видны буквами. Возвращаем настоящие теги во всех языках.
@@ -272,7 +313,7 @@ def patch_resources(dec):
 
 
 ICONS = [  # id, фон, передний план (spark — звезда Claude, clawd — пиксельный Clawd из icons/)
-    ("margyc", "#ff8fd2b1", "spark"),
+    ("clawdio", "#ff8fd2b1", "spark"),
     ("claude", "#ffd97757", "spark"),
     ("forest", "#ff1f5c45", "spark"),
     ("amoled", "#ff000000", "spark"),
@@ -284,24 +325,24 @@ MAIN_ACTIVITY = "com.anthropic.claude.mainactivity.MainActivity"
 
 def patch_icons(dec):
     """Выбор иконки: на каждый вариант адаптивная иконка и activity-alias главного экрана с LAUNCHER.
-    Включён один (по умолчанию margyc), остальные выключены; мод переключает их через PackageManager.
+    Включён один (по умолчанию clawdio), остальные выключены; мод переключает их через PackageManager.
     У самой MainActivity LAUNCHER убирается, иначе на рабочем столе было бы две иконки."""
     drawable = dec / "res/drawable"
     anydpi = dec / "res/mipmap-anydpi-v26"
     anydpi.mkdir(parents=True, exist_ok=True)
-    shutil.copy(HERE / "icons/margyc_icon_fg_clawd.xml", drawable / "margyc_icon_fg_clawd.xml")
+    shutil.copy(HERE / "icons/clawdio_icon_fg_clawd.xml", drawable / "clawdio_icon_fg_clawd.xml")
     for icon_id, color, fg in ICONS:
-        (drawable / f"margyc_icon_bg_{icon_id}.xml").write_text(
+        (drawable / f"clawdio_icon_bg_{icon_id}.xml").write_text(
             '<?xml version="1.0" encoding="utf-8"?>\n'
             '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" '
             'android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">\n'
             f'    <path android:fillColor="{color}" android:pathData="M0,0h108v108h-108z" />\n'
             '</vector>\n')
-        fg_res = "@drawable/ic_launcher_foreground" if fg == "spark" else "@drawable/margyc_icon_fg_clawd"
-        (anydpi / f"margyc_icon_{icon_id}.xml").write_text(
+        fg_res = "@drawable/ic_launcher_foreground" if fg == "spark" else "@drawable/clawdio_icon_fg_clawd"
+        (anydpi / f"clawdio_icon_{icon_id}.xml").write_text(
             '<?xml version="1.0" encoding="utf-8"?>\n'
             '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-            f'    <background android:drawable="@drawable/margyc_icon_bg_{icon_id}" />\n'
+            f'    <background android:drawable="@drawable/clawdio_icon_bg_{icon_id}" />\n'
             f'    <foreground android:drawable="{fg_res}" />\n'
             f'    <monochrome android:drawable="{fg_res}" />\n'
             '</adaptive-icon>\n')
@@ -322,10 +363,10 @@ def patch_icons(dec):
         new_body = new_body.replace(shortcuts.group(0), "")
     aliases = ""
     for icon_id, _, _ in ICONS:
-        aliases += (f'\n        <activity-alias android:name="cat.narezany.mods.icon.{icon_id}" '
+        aliases += (f'\n        <activity-alias android:name="cat.clawdio.mods.icon.{icon_id}" '
                     f'android:targetActivity="{MAIN_ACTIVITY}" android:exported="true" '
                     f'android:enabled="{"true" if icon_id == ICONS[0][0] else "false"}" '
-                    f'android:icon="@mipmap/margyc_icon_{icon_id}" android:roundIcon="@mipmap/margyc_icon_{icon_id}" '
+                    f'android:icon="@mipmap/clawdio_icon_{icon_id}" android:roundIcon="@mipmap/clawdio_icon_{icon_id}" '
                     'android:label="@string/app_name">\n'
                     '            <intent-filter>\n'
                     '                <action android:name="android.intent.action.MAIN"/>\n'
@@ -1322,7 +1363,7 @@ def move_patched(sm):
     65536 ссылок на методы, и каждая ссылка на код мода может его переполнить."""
     new = sm.dec / f"smali_classes{len(sm.dirs) + 1}"
     moved = 0
-    for f in sm.files_with("Lcat/narezany/mods/"):
+    for f in sm.files_with("Lcat/clawdio/mods/"):
         src_dir = next(d for d in sm.dirs if d in f.parents)
         dest = new / f.relative_to(src_dir)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1353,7 +1394,7 @@ def limit_abi(dec, abi):
 def build_dex(work, tools, names):
     out = work / "modbuild"
     shutil.rmtree(out, ignore_errors=True)
-    gen = out / "gen/cat/narezany/mods"
+    gen = out / "gen/cat/clawdio/mods"
     gen.mkdir(parents=True)
     body = ""
     for k, v in sorted(names.items()):
@@ -1366,7 +1407,7 @@ def build_dex(work, tools, names):
         else:
             body += f'    static final String {k} = "{v}";\n'
 
-    (gen / "Names.java").write_text("package cat.narezany.mods;\n\n/** Сгенерировано патчером. */\n"
+    (gen / "Names.java").write_text("package cat.clawdio.mods;\n\n/** Сгенерировано патчером. */\n"
                                     f"final class Names {{\n{body}}}\n")
     sources = [str(p) for p in (HERE / "src").rglob("*.java")] + [str(gen / "Names.java")]
     classes = out / "classes"
@@ -1392,11 +1433,11 @@ def ensure_keystore():
     if KEYSTORE.exists():
         return
     KEYSTORE.parent.mkdir(parents=True, exist_ok=True)
-    log(f"ВНИМАНИЕ: ключа подписи нет, создаю новый {KEYSTORE}. APK с ним не встанет поверх MargyC, "
+    log(f"ВНИМАНИЕ: ключа подписи нет, создаю новый {KEYSTORE}. APK с ним не встанет поверх Clawdio, "
         "подписанного другим ключом.")
     run(["keytool", "-genkeypair", "-keystore", KEYSTORE, "-alias", KEY_ALIAS, "-storepass", KEY_PASS,
          "-keypass", KEY_PASS, "-keyalg", "RSA", "-keysize", "2048", "-validity", "36500",
-         "-dname", "CN=narezany, O=Claude Mods"])
+         "-dname", f"CN={APP_NAME}, O={APP_NAME}"])
 
 
 def sign(apk, out, tools):
@@ -1412,11 +1453,15 @@ def sign(apk, out, tools):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", help="XAPK/APKS/APKM, папка со сплитами или APK оригинального Claude")
-    ap.add_argument("-o", "--output", default="ClaudeMods.apk")
+    ap.add_argument("-o", "--output", default="Clawdio.apk")
     ap.add_argument("--abi", default="arm64-v8a", help="оставить только эту архитектуру (all — все)")
     ap.add_argument("--work", help="рабочая папка (по умолчанию временная)")
     ap.add_argument("--keep", action="store_true", help="не удалять рабочую папку")
+    ap.add_argument("--config", help="файл настроек сборки (по умолчанию config.json)")
     a = ap.parse_args()
+
+    load_config(a.config)
+    log(f"сборка: {APP_NAME} ({NEW_PACKAGE}), канал {CONFIG.get('repo', '?')}/{CONFIG.get('channel_branch', '?')}")
 
     tools = ensure_tools()
     work = pathlib.Path(a.work or tempfile.mkdtemp(prefix="claude-mods-"))

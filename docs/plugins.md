@@ -1,8 +1,12 @@
-# Writing MargyC mods
+# Writing Clawdio mods
 
-A MargyC mod is a small Java library that runs inside the Claude app. It can add hidden context to
+A Clawdio mod is a small Java library that runs inside the Claude app. It can add hidden context to
 every message, change UI strings and colors, react to screens opening, and do anything else Java and
 reflection allow inside the app process.
+
+> **Mods built for MargyC do not load here.** The API classes moved from `cat.narezany.mods.api`
+> to `cat.clawdio.mods.api`. Recompile the mod against the new API — the manifest does not change:
+> `python3 tools/build_mod.py <folder>`.
 
 > **Mods run with the full rights of the app**: they see your chats and your Claude session.
 > Install only mods you trust, and only from people you trust.
@@ -27,7 +31,7 @@ after a restart.
 ```json
 {
   "id": "hello",
-  "name": "Hello, MargyC",
+  "name": "Hello, Clawdio",
   "description": "What the mod does, shown in the app.",
   "author": "you",
   "version": "1.0",
@@ -41,16 +45,16 @@ after a restart.
 |---|---|---|
 | `id` | yes | unique id: lowercase latin letters, digits, `.`, `_`, `-` (2–64 chars). Installing a mod with the same id replaces it |
 | `name` | yes | shown in the app |
-| `entry` | yes | full name of the class that implements `MargyCPlugin` |
+| `entry` | yes | full name of the class that implements `ClawdioPlugin` |
 | `description` | no | shown in the app |
 | `author` | no | |
 | `version` | no | any string |
-| `api` | no | the API version the mod needs, `1` by default. MargyC refuses mods for a newer API |
+| `api` | no | the API version the mod needs, `1` by default. Clawdio refuses mods for a newer API |
 | `settings` | no | settings the app shows for the mod, see below |
 
 ### Settings
 
-MargyC draws a settings screen for the mod from this list (tap the mod in the list). Values are stored
+Clawdio draws a settings screen for the mod from this list (tap the mod in the list). Values are stored
 in the mod's `prefs()` under `key`; read them with `getBoolean` / `getString` / `getInt`, which fall
 back to `default`.
 
@@ -73,15 +77,15 @@ back to `default`.
 
 ## The code
 
-The entry class implements `cat.narezany.mods.api.MargyCPlugin` and has a public no-arg constructor:
+The entry class implements `cat.clawdio.mods.api.ClawdioPlugin` and has a public no-arg constructor:
 
 ```java
 package com.example.hello;
 
-import cat.narezany.mods.api.MargyCPlugin;
-import cat.narezany.mods.api.PluginContext;
+import cat.clawdio.mods.api.ClawdioPlugin;
+import cat.clawdio.mods.api.PluginContext;
 
-public final class HelloMod implements MargyCPlugin {
+public final class HelloMod implements ClawdioPlugin {
     @Override
     public void onCreate(PluginContext ctx) {
         ctx.addPromptContext(() -> ctx.getBoolean("pirate") ? "Answer like a friendly pirate, arr." : null);
@@ -90,7 +94,7 @@ public final class HelloMod implements MargyCPlugin {
 ```
 
 `onCreate` runs once per app start, from `Application.onCreate`, on the main thread. Keep it fast;
-start your own thread for long work. If it throws, MargyC shows the error under the mod in the list
+start your own thread for long work. If it throws, Clawdio shows the error under the mod in the list
 and in the journal, and the other mods still load.
 
 ### PluginContext (API 1)
@@ -98,26 +102,26 @@ and in the journal, and the other mods still load.
 | Method | |
 |---|---|
 | `apiVersion()` | API version, `1` |
-| `margycVersion()` | MargyC version, e.g. `"1.1"` |
+| `clawdioVersion()` | Clawdio version, e.g. `"1.1"` |
 | `app()` | the `Application` |
 | `id()`, `dir()` | the mod id and its folder (read only) |
 | `prefs()` | the mod's own `SharedPreferences`; settings live here too |
 | `getBoolean/getString/getInt(key)` | a setting value or its `default` |
-| `log(message)` | a line in the MargyC journal (*Моды → Мемные модели → Журнал*) |
+| `log(message)` | a line in the Clawdio journal (*Моды → Мемные модели → Журнал*) |
 | `addPromptContext(Supplier<String>)` | hidden context added to every message you send: Claude sees it, the chat does not. Called on every send; return `null` or `""` to add nothing |
 | `addTextFilter(UnaryOperator<String>)` | changes plain UI strings (Compose `Text(String)`; chat messages are not included). Called very often: be fast, return the same string when there is nothing to change |
-| `addColorFilter(IntUnaryOperator)` | changes app colors (ARGB) as they are created, after the MargyC accent. Also hot. Colors are read at start, so changes show after a restart |
-| `addActivityCallbacks(callbacks)` | `ActivityLifecycleCallbacks` for app screens (Claude's and MargyC's: skip classes from `cat.narezany.mods.`) |
+| `addColorFilter(IntUnaryOperator)` | changes app colors (ARGB) as they are created, after the Clawdio accent. Also hot. Colors are read at start, so changes show after a restart |
+| `addActivityCallbacks(callbacks)` | `ActivityLifecycleCallbacks` for app screens (Claude's and Clawdio's: skip classes from `cat.clawdio.mods.`) |
 | `currentActivity()` | the activity in the foreground or `null` |
 
 The mod's class loader has the app's class loader as its parent, so the mod can also reach Claude's
-own classes and MargyC's internals by reflection. Claude's classes are obfuscated and their names
+own classes and Clawdio's internals by reflection. Claude's classes are obfuscated and their names
 change with every Claude update: find what you need by strings and signatures, not by names, and
 fail quietly when it is not there.
 
 ## Building
 
-You need Python 3.8+ and JDK 17+. From the MargyC repo:
+You need Python 3.8+ and JDK 17+. From the Clawdio repo:
 
 ```sh
 python3 tools/build_mod.py path/to/my-mod        # -> <id>.mcmod
@@ -133,8 +137,8 @@ my-mod/
   libs/*.jar          optional, packed into the dex
 ```
 
-The script compiles against `android.jar` (API 35) and the MargyC API, then runs `d8` with
-`--min-api 29`. The API classes are not packed into the mod: they come from MargyC at run time.
+The script compiles against `android.jar` (API 35) and the Clawdio API, then runs `d8` with
+`--min-api 29`. The API classes are not packed into the mod: they come from Clawdio at run time.
 
 A complete example is in [`examples/hello`](../examples/hello): settings, hidden prompt context and a
 greeting toast.
@@ -146,12 +150,12 @@ python3 tools/build_mod.py examples/hello
 ### Building by hand
 
 If you prefer your own build: compile your classes with `javac --release 8` against `android.jar` and
-the sources in [`src/cat/narezany/mods/api`](../src/cat/narezany/mods/api), dex them with `d8`
+the sources in [`src/cat/clawdio/mods/api`](../src/cat/clawdio/mods/api), dex them with `d8`
 (min API 29) without the API classes, and zip `manifest.json` + `classes.dex` (+ `icon.png`).
 
 ## Tips
 
-- Android 14+ loads only read-only dex files; MargyC marks them so on install.
+- Android 14+ loads only read-only dex files; Clawdio marks them so on install.
 - Everything a mod changes is undone by turning it off and restarting.
-- Crashes in a mod crash Claude. MargyC's crash screen shows the stack trace on the next start; turn
+- Crashes in a mod crash Claude. Clawdio's crash screen shows the stack trace on the next start; turn
   the mod off there or in *Моды → Свои моды*.

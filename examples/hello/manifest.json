@@ -1,7 +1,7 @@
 {
   "id": "hello",
-  "name": "Hello, MargyC",
-  "description": "Example mod: Claude calls you by a nickname and can talk like a pirate. Source: examples/hello in the MargyC repo.",
+  "name": "Hello, Clawdio",
+  "description": "Example mod: Claude calls you by a nickname and can talk like a pirate. Source: examples/hello in the Clawdio repo.",
   "author": "narezany",
   "version": "1.0",
   "api": 1,

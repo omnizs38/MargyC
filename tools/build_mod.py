@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a MargyC mod (.mcmod) from a folder.
+"""Build a Clawdio mod (.mcmod) from a folder.
 
     python3 tools/build_mod.py examples/hello            # -> hello.mcmod
     python3 tools/build_mod.py my-mod -o my-mod.mcmod
@@ -10,6 +10,7 @@ The folder holds manifest.json, src/**/*.java, an optional icon.png and optional
 """
 import argparse
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -21,7 +22,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import patcher  # noqa: E402  (tool downloads and running commands)
 
-API_SOURCES = ROOT / "src" / "cat" / "narezany" / "mods" / "api"
+API_SOURCES = ROOT / "src" / "cat" / "clawdio" / "mods" / "api"
 
 
 def tools():
@@ -68,11 +69,11 @@ def main():
             patcher.run(["javac", "--release", "8", "-nowarn", "-encoding", "UTF-8", "-cp", android, "-d", api,
                          *map(str, API_SOURCES.glob("*.java"))])
             classes = tmp / "classes"
-            cp = ":".join([str(android), str(api), *libs])
+            cp = os.pathsep.join([str(android), str(api), *libs])
             patcher.run(["javac", "--release", "8", "-nowarn", "-encoding", "UTF-8", "-cp", cp, "-d", classes, *sources])
             dex = tmp / "dex"
             dex.mkdir()
-            # API classes are in MargyC itself: classpath only, not packed into the mod
+            # API classes are in Clawdio itself: classpath only, not packed into the mod
             patcher.run(["java", "-cp", t / "r8.jar", "com.android.tools.r8.D8", "--release", "--min-api", "29",
                          "--lib", android, "--classpath", api, "--output", dex,
                          *map(str, classes.rglob("*.class")), *libs])

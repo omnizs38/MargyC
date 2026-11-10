@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Код мода собирается
+        run: python3 tools/typecheck.py
+
+      - name: Python-скрипты без ошибок
+        run: python3 -m compileall -q patcher.py tools
+
+      - name: Настройки сборки читаются
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          cfg = json.loads(pathlib.Path("config.json").read_text(encoding="utf-8"))
+          for key in ("brand", "package", "repo", "channel_branch", "author", "author_url"):
+              if not cfg.get(key):
+                  sys.exit(f"config.json: нет {key}")
+          print("config.json ok:", cfg["brand"], cfg["package"], cfg["repo"])
+          PY
+
+      - name: Ресурсы — корректный XML
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, xml.etree.ElementTree as ET
+          bad = []
+          for p in pathlib.Path("res").rglob("*.xml"):
+              try:
+                  ET.parse(p)
+              except Exception as e:
+                  bad.append(f"{p}: {e}")
+          for p in [pathlib.Path("examples/hello/manifest.json")]:
+              pass
+          if bad:
+              sys.exit("\n".join(bad))
+          print("xml ok")
+          PY
+
+      - name: Версия в коде и в README совпадает
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          src = pathlib.Path("src/cat/clawdio/mods/Mods.java").read_text(encoding="utf-8")
+          version = re.search(r'VERSION\s*=\s*"([^"]+)"', src).group(1)
+          readme = pathlib.Path("README.md").read_text(encoding="utf-8")
+          print("версия в коде:", version)
+          if version not in readme:
+              sys.exit(f"версии {version} нет в README — поправь бейдж")
+          PY
