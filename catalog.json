@@ -1,0 +1,12 @@
+{
+  "mods": [
+    {
+      "id": "hello",
+      "name": "Hello, Clawdio",
+      "description": "Пример мода: Клод зовёт тебя по имени и может говорить как пират. Исходники — examples/hello в репозитории.",
+      "author": "narezany",
+      "version": "1.0",
+      "file": "hello.mcmod"
+    }
+  ]
+}
