@@ -341,6 +341,8 @@ final class L {
                 "Signature mismatch: this build is signed with another key and will not install over this one. "
                         + "Install it manually after removing the old version.");
         put("Не получилось скачать: ", "Couldn't download: ");
+        put("Сборка ещё не появилась в канале. Попробуй через минуту.",
+                "The build hasn't reached the channel yet. Try again in a minute.");
         put("Не получилось открыть установщик", "Couldn't open the installer");
         // 1.3
         put(" дн.", " days");

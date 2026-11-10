@@ -88,6 +88,18 @@ final class Config {
         return repo.isEmpty() ? "" : "https://api.github.com/repos/" + repo;
     }
 
+    /**
+     * Файл канала через API GitHub: там содержимое всегда свежее, а raw.githubusercontent
+     * отдаёт закэшированную копию. Пусто — канал не на GitHub, тогда только raw.
+     */
+    static String apiFileUrl(String name) {
+        String base = apiBase();
+        if (base.isEmpty() || !customServer().isEmpty()) {
+            return "";
+        }
+        return base + "/contents/" + name + "?ref=" + branch();
+    }
+
     /** Ссылка на исходники. */
     static String homepage() {
         return str("homepage", "https://github.com/omnizs38/MargyC");

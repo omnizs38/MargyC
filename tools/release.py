@@ -83,7 +83,7 @@ def read_channel(branch, repo):
         url = f"https://raw.githubusercontent.com/{repo}/{branch}/{name}"
         try:
             with urllib.request.urlopen(url, timeout=20) as r:
-                out[name] = r.read().decode("utf-8")
+                out[name] = r.read().decode("utf-8-sig")  # utf-8-sig: с BOM и без него
         except Exception:
             out[name] = None
     return out

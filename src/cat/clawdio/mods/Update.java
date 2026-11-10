@@ -158,7 +158,7 @@ final class Update {
             String json = null;
             boolean channelOk = false;
             try {
-                json = fetch(Config.rawBase() + "version.json?t=" + System.currentTimeMillis());
+                json = fetchVersion();
                 channelOk = true;
                 found = pick(json);
             } catch (Throwable t) {
@@ -250,7 +250,7 @@ final class Update {
             File apk = new File(a.getCacheDir(), ApkProvider.FILE_NAME);
             String fail = null;
             try {
-                downloadTo(info.url(), apk);
+                downloadWithRetry(info.url(), apk);
                 if (!info.sha256.isEmpty()) {
                     String hash = Signer.sha256File(apk);
                     if (!info.sha256.equalsIgnoreCase(hash)) {
@@ -284,6 +284,10 @@ final class Update {
                 if ("signature".equals(error)) {
                     status.setText(L.t("Подпись не совпадает: сборка подписана другим ключом "
                             + "и не встанет поверх. Поставь вручную, удалив старую версию."));
+                    return;
+                }
+                if (error.contains("404")) {
+                    status.setText(L.t("Сборка ещё не появилась в канале. Попробуй через минуту."));
                     return;
                 }
                 status.setText(L.t("Не получилось скачать: ") + error);
@@ -382,16 +386,45 @@ final class Update {
     }
 
     static String fetch(String url) throws Exception {
-        String text = new String(download(url), "UTF-8");
+        return fetch(url, null);
+    }
+
+    static String fetch(String url, String accept) throws Exception {
+        String text = new String(download(url, accept), "UTF-8");
         // сервер может отдать файл с BOM — JSON-парсер его не переживёт
         return text.startsWith("\uFEFF") ? text.substring(1) : text;
     }
 
+    /**
+     * version.json канала. Через API GitHub — там свежее: raw.githubusercontent отдаёт
+     * закэшированную копию на пять минут. Если API не отвечает (лимит, сеть) — берём raw.
+     */
+    static String fetchVersion() throws Exception {
+        String api = Config.apiBase();
+        if (!api.isEmpty()) {
+            try {
+                return fetch(api + "/contents/version.json?ref=" + Config.branch(),
+                        "application/vnd.github.raw");
+            } catch (Throwable t) {
+                Log.e(Mods.TAG, "update check (api)", t);
+            }
+        }
+        return fetch(Config.rawBase() + "version.json?t=" + System.currentTimeMillis());
+    }
+
     static byte[] download(String url) throws Exception {
+        return download(url, null);
+    }
+
+    /** Загрузка с необязательным заголовком Accept: API GitHub отдаёт так сырой файл. */
+    static byte[] download(String url, String accept) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(15000);
         c.setReadTimeout(30000);
         c.setUseCaches(false);
+        if (accept != null) {
+            c.setRequestProperty("Accept", accept);
+        }
         try {
             if (c.getResponseCode() != 200) {
                 throw new java.io.IOException("HTTP " + c.getResponseCode());
@@ -430,5 +463,26 @@ final class Update {
         } finally {
             c.disconnect();
         }
+    }
+
+    /**
+     * Свежая сборка может ещё не доехать до кэша GitHub — тогда 404. Пробуем ещё раз
+     * через полминуты: кэш как раз обновится.
+     */
+    static void downloadWithRetry(String url, File dest) throws Exception {
+        Exception last = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                downloadTo(url, dest);
+                return;
+            } catch (java.io.IOException e) {
+                last = e;
+                if (!String.valueOf(e.getMessage()).contains("404")) {
+                    throw e;
+                }
+                Thread.sleep(30000);
+            }
+        }
+        throw last;
     }
 }

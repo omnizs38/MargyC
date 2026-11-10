@@ -46,8 +46,7 @@ final class Catalog {
             List<Entry> list = null;
             String err = null;
             try {
-                JSONArray a = new JSONObject(Update.fetch(Config.rawBase() + "catalog.json?t=" + System.currentTimeMillis()))
-                        .optJSONArray("mods");
+                JSONArray a = new JSONObject(catalogJson()).optJSONArray("mods");
                 list = new ArrayList<Entry>();
                 for (int i = 0; a != null && i < a.length(); i++) {
                     Entry e = new Entry(a.getJSONObject(i));
@@ -66,6 +65,19 @@ final class Catalog {
         }, "Clawdio catalog").start();
     }
 
+    /** Каталог модов: через API (свежее), при отказе — через raw. */
+    private static String catalogJson() throws Exception {
+        String api = Config.apiFileUrl("catalog.json");
+        if (!api.isEmpty()) {
+            try {
+                return Update.fetch(api, "application/vnd.github.raw");
+            } catch (Throwable t) {
+                Log.e(Mods.TAG, "catalog (api)", t);
+            }
+        }
+        return Update.fetch(Config.rawBase() + "catalog.json?t=" + System.currentTimeMillis());
+    }
+
     interface Installed {
         /** В главном потоке; info == null — не вышло, текст ошибки в error. */
         void installed(Plugins.Info info, String error);
@@ -77,7 +89,7 @@ final class Catalog {
             Plugins.Info info = null;
             String err = null;
             try {
-                byte[] bytes = Update.download(Config.rawBase() + entry.file);
+                byte[] bytes = modBytes(entry.file);
                 info = Plugins.install(a, new java.io.ByteArrayInputStream(bytes));
                 Plugins.setEnabled(info.id, true);
             } catch (Throwable t) {
@@ -89,6 +101,19 @@ final class Catalog {
             Fake.log("catalog: install " + entry.id + (e != null ? " failed: " + e : " ok"));
             main.post(() -> done.installed(result, e));
         }, "Clawdio catalog install").start();
+    }
+
+    /** Файл мода: через API (свежее), при отказе — через raw. */
+    private static byte[] modBytes(String file) throws Exception {
+        String api = Config.apiFileUrl(file);
+        if (!api.isEmpty()) {
+            try {
+                return Update.download(api, "application/vnd.github.raw");
+            } catch (Throwable t) {
+                Log.e(Mods.TAG, "catalog download (api)", t);
+            }
+        }
+        return Update.download(Config.rawBase() + file);
     }
 
     /** Установленная версия мода или null. */
