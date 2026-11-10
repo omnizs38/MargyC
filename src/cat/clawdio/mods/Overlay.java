@@ -66,13 +66,7 @@ final class Overlay {
         return m >= Calendar.SEPTEMBER ? "leaves" : "off";
     }
 
-    static boolean splash() {
-        return pref("splash_on", false);
-    }
-
-    static void setSplash(boolean on) throws Exception {
-        Mods.prefs().edit().putBoolean("splash_on", on).apply();
-    }
+    /** Экран запуска теперь статичен: drawable бренда заменён Clawd, переключателя нет. */
 
     private static boolean pref(String key, boolean def) {
         try {
@@ -134,41 +128,7 @@ final class Overlay {
             }
             layer.start();
         }
-        applySplash(a);
     }
-
-    /**
-     * Свой экран запуска — это системный splash приложения с темой Theme.Clawdio.Splash (Clawd вместо логотипа
-     * Claude). Android 13+ запоминает тему splash для следующих запусков, поэтому достаточно выставить её из
-     * любого окна приложения; на Android 12 и старше так нельзя.
-     */
-    static boolean splashSupported() {
-        return android.os.Build.VERSION.SDK_INT >= 33;
-    }
-
-    static void applySplash(Activity a) {
-        if (!splashSupported()) {
-            return;
-        }
-        try {
-            boolean on = splash();
-            if (splashApplied != null && splashApplied == on) {
-                return;
-            }
-            int id = Mods.res(a, "Theme.Clawdio.Splash", "style");
-            if (on && id == 0) {
-                Fake.log("splash: no Theme.Clawdio.Splash");
-                return;
-            }
-            a.getSplashScreen().setSplashScreenTheme(on ? id : android.content.res.Resources.ID_NULL);
-            splashApplied = on;
-            Fake.log("splash: " + (on ? "Clawd" : "Claude"));
-        } catch (Throwable t) {
-            Fake.log("splash error: " + t);
-        }
-    }
-
-    private static Boolean splashApplied;
 
     /** Прозрачный слой без касаний: эффекты и счётчик. */
     static final class Layer extends FrameLayout {

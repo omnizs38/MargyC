@@ -283,20 +283,6 @@ public final class ModsActivity extends Activity {
         seasonRow.chevron();
         seasonRow.setOnClickListener(v -> chooseSeason());
         g.addView(seasonRow);
-        Ui.Row splash = ui.new Row(L.t("Свой экран запуска"), Overlay.splashSupported()
-                ? L.t("Clawd вместо логотипа Claude на экране загрузки. Со следующего запуска.")
-                : L.t("Clawd вместо логотипа Claude на экране загрузки. Нужен Android 13 или новее."));
-        splash.toggle(Overlay.splash(), Overlay.splashSupported(), on -> {
-            try {
-                Overlay.setSplash(on);
-                Overlay.applySplash(this);
-                return true;
-            } catch (Exception e) {
-                return false;
-            }
-        });
-        splash.icon(IC_SPLASH);
-        g.addView(splash);
         fontRow = ui.new Row(L.t("Шрифт"), "");
         fontRow.icon(IC_FONT);
         fontRow.chevron();

@@ -106,3 +106,22 @@ Users on the new Claude version can send the journal (*Mods → Journal*) — it
 version the app started with and what every hook did. *Mods → Claude compatibility* shows the
 same information as a warning when the installed Claude is newer than the tested one, and copies a
 ready-to-send report.
+
+## Obfuscated resource names
+
+Since v1.261106.19 Claude ships with **resource names obfuscated by R8 to `APKTOOL_DUMMYVAL_*`**:
+`public.xml` keeps every resource id, but the names are gone. This breaks any hook that refers
+to a resource by its name. The patcher does not rely on the original names for its own files:
+
+- the app label points at `@string/clawdio_app_name` (ours, defined in `res/values/clawdio_strings.xml`);
+- the icon aliases and the launcher activity references use `@string/clawdio_app_name` too;
+- our `res/` files go into the APK as-is under their own names.
+
+**Not recoverable** without the original `public.xml` keys: the entry points into Claude's own UI
+(the side-menu / “Моды” item lived in a resource that no longer has a stable name), the
+`TextStringSimpleElement` Compose text node for the String-translation filter, and the old
+REST chat engine body and Luna font-family wiring. Those three are optional and degrade
+gracefully. The launcher shortcut `Clawdio → Моды` in `res/xml/clawdio_shortcuts.xml` is our
+own entry point and does not depend on any of them.
+
+If Anthropic restores readable names, the optional hooks return by themselves.

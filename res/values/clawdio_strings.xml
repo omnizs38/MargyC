@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="clawdio_widget_description">Clawd with a greeting and today\'s messages</string>
+    <string name="clawdio_app_name">Clawdio</string>
 </resources>

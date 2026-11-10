@@ -34,6 +34,24 @@ import urllib.request
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
+
+# Файлы патчера — всегда в UTF-8. Без этого Windows читает их в кодовой странице
+# (cp1251/cp1252) и падает на любом не-ASCII символе.
+_read_text_orig = pathlib.Path.read_text
+_write_text_orig = pathlib.Path.write_text
+
+
+def _read_text_utf8(self, encoding="utf-8", errors=None):
+    return _read_text_orig(self, encoding=encoding, errors=errors)
+
+
+def _write_text_utf8(self, data, encoding="utf-8", errors=None, **kw):
+    return _write_text_orig(self, data, encoding=encoding, errors=errors, **kw)
+
+
+pathlib.Path.read_text = _read_text_utf8
+pathlib.Path.write_text = _write_text_utf8
+
 DEFAULT_CONFIG = HERE / "config.json"
 OLD_PACKAGE = "com.anthropic.claude"
 ICON_BACKGROUND = "#ff8fd2b1"
@@ -44,6 +62,10 @@ MOD = "Lcat/clawdio/mods/"
 CONFIG = {}
 NEW_PACKAGE = "cat.clawdio.claude"
 APP_NAME = "Clawdio"
+
+
+def raise_missing(msg):
+    raise PatchError(msg)
 
 
 def load_config(path=None):
@@ -221,10 +243,14 @@ def patch_manifest(dec):
     s = s.replace(f"{OLD_PACKAGE}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
                   f"{NEW_PACKAGE}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
     s = s.replace(f'android:taskAffinity="{OLD_PACKAGE}.assist"', f'android:taskAffinity="{NEW_PACKAGE}.assist"')
+    # метка приложения — @string/..., имя строки обфусцировано; ведёт на нашу clawdio_app_name
+    s = re.sub(r'android:label="@string/[^"]+"', 'android:label="@string/clawdio_app_name"', s)
     activities = (
-        '        <activity android:exported="false" android:label="Моды" '
+        '        <activity android:exported="true" android:label="Clawdio" '
         'android:name="cat.clawdio.mods.ModsActivity" '
-        'android:theme="@android:style/Theme.DeviceDefault.DayNight"/>\n'
+        'android:theme="@android:style/Theme.DeviceDefault.DayNight">\n'
+        '            <meta-data android:name="android.app.shortcuts" android:resource="@xml/clawdio_shortcuts"/>\n'
+        '        </activity>\n'
         '        <activity android:exported="false" android:name="cat.clawdio.mods.ThemeActivity" '
         'android:theme="@android:style/Theme.DeviceDefault.DayNight"/>\n'
         '        <activity android:exported="false" android:name="cat.clawdio.mods.CrashActivity" '
@@ -258,17 +284,20 @@ def patch_manifest(dec):
 
 def patch_resources(dec):
     lc = dec / "res/xml/locales_config.xml"
-    s = lc.read_text()
-    langs = [d.name[len("values-"):] for d in sorted((HERE / "res").glob("values-*"))
-             if re.fullmatch(r"values-[a-z]{2,3}(-r[A-Z]{2})?", d.name)]  # только языки, не values-v31 и т. п.
-    for lang in langs:
-        if f'android:name="{lang}"' not in s:
-            s = sub_once(s, r"(\n\s*</locale-config>)", f'\n    <locale android:name="{lang}" />\\1', "locales_config")
-    lc.write_text(s)
+    if lc.exists():
+        s = lc.read_text()
+        langs = [d.name[len("values-"):] for d in sorted((HERE / "res").glob("values-*"))
+                 if re.fullmatch(r"values-[a-z]{2,3}(-r[A-Z]{2})?", d.name)]  # только языки, не values-v31 и т. п.
+        for lang in langs:
+            if f'android:name="{lang}"' not in s:
+                s = sub_once(s, r"(\n\s*</locale-config>)", f'\n    <locale android:name="{lang}" />\\1', "locales_config")
+        lc.write_text(s)
+    else:
+        # в новых версиях Claude файла нет: приложение само перечисляет языки
+        log("  locales_config.xml нет — пропускаю")
 
-    st = dec / "res/values/strings.xml"
-    st.write_text(re.sub(r'<string name="app_name">[^<]*</string>',
-                         f'<string name="app_name">{APP_NAME}</string>', st.read_text()))
+    # метка приложения: манифест уже указывает на clawdio_app_name (см. patch_manifest),
+    # значение есть в res/values/clawdio_strings.xml (идёт в APK после копирования res/)
 
     # фон иконки
     (dec / "res/drawable/ic_launcher_background.xml").write_text(
@@ -290,6 +319,11 @@ def patch_resources(dec):
         dst.mkdir(exist_ok=True)
         for f in src.glob("*.xml"):
             shutil.copy(f, dst / f.name)
+
+    # в shortcut-файле пакет приложения прописан по умолчанию: подставить свой
+    sc = dec / "res/xml/clawdio_shortcuts.xml"
+    if sc.exists() and NEW_PACKAGE != "cat.clawdio.claude":
+        sc.write_text(sc.read_text().replace("cat.clawdio.claude", NEW_PACKAGE), encoding="utf-8")
 
     # настройки сборки из config.json: приложение читает их отсюда
     (dec / "res/values/clawdio_config.xml").write_text(
@@ -332,6 +366,10 @@ def patch_icons(dec):
     anydpi = dec / "res/mipmap-anydpi-v26"
     anydpi.mkdir(parents=True, exist_ok=True)
     shutil.copy(HERE / "icons/clawdio_icon_fg_clawd.xml", drawable / "clawdio_icon_fg_clawd.xml")
+    # экран запуска: дизайн бренда — Clawd вместо логотипа Claude
+    logo = dec / "res/drawable/logo_claude_splash.xml"
+    if logo.exists():
+        shutil.copy(HERE / "icons/clawdio_icon_fg_clawd.xml", logo)
     for icon_id, color, fg in ICONS:
         (drawable / f"clawdio_icon_bg_{icon_id}.xml").write_text(
             '<?xml version="1.0" encoding="utf-8"?>\n'
@@ -368,7 +406,7 @@ def patch_icons(dec):
                     f'android:targetActivity="{MAIN_ACTIVITY}" android:exported="true" '
                     f'android:enabled="{"true" if icon_id == ICONS[0][0] else "false"}" '
                     f'android:icon="@mipmap/clawdio_icon_{icon_id}" android:roundIcon="@mipmap/clawdio_icon_{icon_id}" '
-                    'android:label="@string/app_name">\n'
+                    'android:label="@string/clawdio_app_name">\n'
                     '            <intent-filter>\n'
                     '                <action android:name="android.intent.action.MAIN"/>\n'
                     '                <category android:name="android.intent.category.LAUNCHER"/>\n'
@@ -570,7 +608,7 @@ def patch_account(sm):
     acc = Serial(sm, "com.anthropic.claude.api.account.Account")
     code = ""
     for e in ("email_address", "full_name", "display_name"):
-        if e in acc.elements and acc.types[acc.elements.index(e) + 1] == "Ljava/lang/String;":
+        if e in acc.elements and acc.type_of(e) == "Ljava/lang/String;":
             r = acc.reg(e)
             if e == "email_address":
                 code += f"invoke-static/range {{p{r} .. p{r}}}, {MOD}Streamer;->seen(Ljava/lang/String;)V\n\n    "
@@ -621,10 +659,10 @@ def patch_account(sm):
     upd.file.write_text(t)
 
     slot = Serial(sm, "com.anthropic.claude.api.account.GreetingSlot")
-    if "text" not in slot.elements or slot.types[slot.elements.index("text") + 1] != "Ljava/lang/String;":
+    if "text" not in slot.elements or slot.type_of("text") != "Ljava/lang/String;":
         raise PatchError("GreetingSlot: нет text: String")
     field = f"{slot.cls}->{slot.fields('text')['text']}:Ljava/lang/String;"
-    sig = "(Ljava/util/List;Ljava/lang/String;Ljava/time/ZonedDateTime;)Ljava/lang/String;"
+    sig = r"\(Ljava/util/List;Ljava/lang/String;L[^)]+;\)Ljava/lang/String;"
     done = 0
     for f in sm.files_with(field):
         t = f.read_text()
@@ -635,7 +673,7 @@ def patch_account(sm):
                                      f"{r.group(1)}move-result-object {r.group(2)}\n{r.group(1)}return-object {r.group(2)}\n"),
                           m.group(2))
             return m.group(1) + body + m.group(3)
-        t2, n = re.subn(r"(\.method public static final \w+" + re.escape(sig) + r"\n)((?:(?!\.end method)[\s\S])*?" + re.escape(field)
+        t2, n = re.subn(r"(\.method public static final \w+" + sig + r"\n)((?:(?!\.end method)[\s\S])*?" + re.escape(field)
                         + r"(?:(?!\.end method)[\s\S])*?)(\.end method)", fix, t)
         if n:
             f.write_text(t2)
@@ -665,7 +703,22 @@ PARAM = re.compile(r"\[*(?:L[^;]+;|[ZBSCIFJD])")
 class Serial:
     """Data-класс kotlinx.serialization по его serialName. Сериализатор перечисляет элементы
     (addElement("id", ...)) по порядку и создаёт объект синтетическим конструктором
-    <init>(I маска, элемент0, элемент1, ...), а тот раскладывает параметры по полям."""
+    <init>(маска, элемент0, элемент1, ...) или <init>(элемент0, элемент1, ..., маска).
+    Маска — один int, до двух int (у больших классов) или long; её позиция (в начале или в конце)
+    разная в разных сборках."""
+
+    @staticmethod
+    def _mask_info(t, n_elements):
+        """Параметры конструктора: (маска в начале, сколько регистров маска занимает, типы элементов)."""
+        if len(t) == n_elements + 1 and t[0] in "IJ":
+            return True, (2 if t[0] == "J" else 1), t[1:]
+        if len(t) == n_elements + 1 and t[-1] in "IJ":
+            return False, (2 if t[-1] == "J" else 1), t[:-1]
+        if len(t) == n_elements + 2 and t[0] == "I" and t[1] == "I":
+            return True, 2, t[2:]
+        if len(t) == n_elements + 2 and t[-1] == "I" and t[-2] == "I":
+            return False, 2, t[:-2]
+        return None, 0, []
 
     def __init__(self, sm, serial_name):
         found = []
@@ -673,7 +726,12 @@ class Serial:
             s = f.read_text()
             names = re.findall(r'const-string (\w+), "([^"]+)"\s+(?:const/4 \w+, 0x[01]\s+)?invoke-virtual \{\w+, \1, \w+\}, '
                                r"Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;->\w+\(Ljava/lang/String;Z\)V", s)
-            made = set(re.findall(r"invoke-direct(?:/range)? \{[^}]*\}, (L[^;]+;)-><init>\(I[^)]*\)V", s))
+            made = set()
+            for cls in set(re.findall(r"invoke-direct(?:/range)? \{[^}]*\}, (L[^;]+;)-><init>\([^)]*\)V", s)):
+                if cls == "Ljava/lang/Object;" or "PluginGeneratedSerialDescriptor" in cls:
+                    continue
+                if self._mask_ctor(sm, cls, len(names)):
+                    made.add(cls)
             if names and len(made) == 1:
                 found.append(([n for _, n in names], made.pop()))
         if len(found) != 1:
@@ -681,20 +739,41 @@ class Serial:
         self.name = serial_name
         self.elements, self.cls = found[0]
         self.file = sm.file_of(self.cls)
-        m = re.search(r"\.method public synthetic constructor <init>\((I[^)]*)\)V\n\s+\.locals \d+\n([\s\S]*?)\n\.end method",
-                      self.file.read_text())
-        if not m:
+        m = None
+        for candidate in re.finditer(r"\.method public (?:synthetic )?constructor <init>\(([^)]*)\)V\n\s+\.locals \d+\n([\s\S]*?)\n\.end method",
+                                     self.file.read_text()):
+            t = PARAM.findall(candidate.group(1))
+            at_start, regs, elems = self._mask_info(t, len(self.elements))
+            if at_start is not None:
+                m = candidate
+                self.mask_at_start, self.mask_regs, self.types = at_start, regs, elems
+                break
+        if m is None:
             raise PatchError(f"{serial_name}: нет синтетического конструктора")
-        self.types = PARAM.findall(m.group(1))
-        if len(self.types) < len(self.elements) + 1:
-            raise PatchError(f"{serial_name}: параметров меньше, чем элементов")
         self.header = m.group(0)[:m.start(2) - m.start(0)]
         self.body = m.group(2)
 
+    @staticmethod
+    def _mask_ctor(sm, cls, n_elements):
+        """У класса конструктор с маской в начале или в конце: один I, один J или два I подряд."""
+        try:
+            f = sm.file_of(cls)
+        except PatchError:
+            return False
+        for m in re.finditer(r"\.method public (?:synthetic )?constructor <init>\(([^)]*)\)V", f.read_text()):
+            t = PARAM.findall(m.group(1))
+            if Serial._mask_info(t, n_elements)[0] is not None:
+                return True
+        return False
+
     def reg(self, element):
-        """Регистр параметра элемента в синтетическом конструкторе: p0 — this, p1 — маска."""
-        i = self.elements.index(element) + 1
-        return 1 + sum(2 if t in ("J", "D") else 1 for t in self.types[:i])
+        """Регистр параметра элемента в синтетическом конструкторе."""
+        idx = self.elements.index(element)
+        return 1 + self.mask_regs + sum(2 if t in ("J", "D") else 1 for t in self.types[:idx])
+
+    def type_of(self, element):
+        """Тип параметра элемента."""
+        return self.types[self.elements.index(element)]
 
     def fields(self, *elements):
         """Элемент -> поле класса: какой параметр конструктор кладёт в какое поле."""
@@ -761,7 +840,7 @@ def patch_model_serializers(sm):
             continue
         try:
             ser = Serial(sm, m.group(1))
-            if "model" not in ser.elements or ser.types[ser.elements.index("model") + 1] != "Ljava/lang/String;":
+            if "model" not in ser.elements or ser.type_of("model") != "Ljava/lang/String;":
                 continue
             field = ser.fields("model")["model"]
         except PatchError:
@@ -807,12 +886,11 @@ def patch_models(sm):
     # аккаунте мемная модель «недоступна». AvailableModelsConfig(models) создаётся конструктором (List, маска).
     available = Serial(sm, "com.anthropic.claude.models.organization.configtypes.AvailableModelsConfig.AvailableModel")
     names["FAKE_AVAILABLE"] = available.fields("model_id")
-    f = sm.one_with('"AvailableModelsConfig(models="')
-    s = f.read_text()
-    s = sub_once(s, r"(\.method public synthetic constructor <init>\(Ljava/util/List;I\)V\n\s+\.locals \d+\n)",
-                 r"\1\n    invoke-static/range {p1 .. p1}, " + MOD + r"Fake;->available(Ljava/util/List;)Ljava/util/List;"
-                 r"\n\n    move-result-object p1\n", "AvailableModelsConfig(models)")
-    f.write_text(s)
+    # AvailableModelsConfig(models) создаётся конструктором (List, маска) или (маска, List)
+    cfg = Serial(sm, "com.anthropic.claude.models.organization.configtypes.AvailableModelsConfig")
+    r = cfg.reg("models")
+    cfg.hook(f"invoke-static/range {{p{r} .. p{r}}}, {MOD}Fake;->available(Ljava/util/List;)Ljava/util/List;"
+             f"\n\n    move-result-object p{r}\n")
 
     log(f"  поле model в сериализаторах: {patch_model_serializers(sm)}")
 
@@ -835,22 +913,25 @@ def patch_models(sm):
 
     # тело PUT model_selector_state создаёт приложение, обычным конструктором (model, thinking)
     body = Serial(sm, "com.anthropic.claude.api.bootstrap.ModelSelectorStateBody")
-    if body.elements[0] != "model" or body.types[1] != "Ljava/lang/String;":
+    if body.elements[0] != "model" or body.type_of("model") != "Ljava/lang/String;":
         raise PatchError("ModelSelectorStateBody: первым ожидался model: String")
     s = body.file.read_text()
-    s = sub_once(s, r"(\.method public constructor <init>\(" + re.escape("".join(body.types[1:len(body.elements) + 1]))
+    s = sub_once(s, r"(\.method public constructor <init>\(" + re.escape("".join(body.types))
                  + r"\)V\n\s+\.locals \d+\n)",
                  r"\1\n    invoke-static/range {p1 .. p1}, " + MOD + r"Fake;->remember(Ljava/lang/String;)Ljava/lang/String;"
                  r"\n\n    move-result-object p1\n", "ModelSelectorStateBody(model, thinking)")
     body.file.write_text(s)
 
     # настройка MODEL беседы, в том числе из состояния с сервера: Model(model: String)
-    f = sm.one_with('"Model(model="')
-    s = f.read_text()
-    s = sub_once(s, r"(\.method public constructor <init>\(Ljava/lang/String;\)V\n\s+\.locals \d+\n)",
-                 r"\1\n    invoke-static/range {p1 .. p1}, " + MOD + r"Fake;->restore(Ljava/lang/String;)Ljava/lang/String;"
-                 r"\n\n    move-result-object p1\n", "Model(model)")
-    f.write_text(s)
+    try:
+        f = sm.one_with('"Model(model="')
+        s = f.read_text()
+        s = sub_once(s, r"(\.method public constructor <init>\(Ljava/lang/String;\)V\n\s+\.locals \d+\n)",
+                     r"\1\n    invoke-static/range {p1 .. p1}, " + MOD + r"Fake;->restore(Ljava/lang/String;)Ljava/lang/String;"
+                     r"\n\n    move-result-object p1\n", "Model(model)")
+        f.write_text(s)
+    except PatchError as e:
+        log(f"  Model(model) не найден, модель беседы после ответа не восстановится: {e}")
 
     # состояние выбора модели в чате: модель беседы (из хаба, REST, сессий) кладётся в него одним
     # методом o(String) { C.setValue(ModelId(normalize(id))) }, по нему подпись под полем ввода. ModelId здесь —
@@ -859,7 +940,8 @@ def patch_models(sm):
                   + r":Ljava/lang/String;\s+invoke-static \{\1\}, (L[^;]+;)->\w+\(Ljava/lang/String;\)Ljava/lang/String;",
                   entry.file.read_text())
     if not m:
-        raise PatchError("ModelSelectorEntry.toString: не нашёл value-класс ModelId")
+        log("  ModelSelectorEntry.toString: value-класс ModelId не найден, модель беседы не восстановится")
+        return names
     model_id = m.group(2)
     setter = re.compile(r"(\.method public final \w+\(Ljava/lang/String;\)V\n\s+\.locals 1\n)"
                         r"\s+invoke-static \{p1\}, L[^;]+;->\w+\(Ljava/lang/String;\)Ljava/lang/String;"
@@ -873,7 +955,8 @@ def patch_models(sm):
         bare = re.sub(r"\n\s*\.line \d+", "", s)
         found += [(f, mm.group(1)) for mm in setter.finditer(bare)]
     if len(found) != 1:
-        raise PatchError(f"установка модели беседы: найдено {len(found)}, ожидалось 1")
+        log(f"  установка модели беседы: найдено {len(found)}, ожидалось 1, пропускаю")
+        return names
     f, header = found[0]
     s = f.read_text()
     if header not in s:
@@ -888,7 +971,8 @@ def patch_models(sm):
                         r"\s+invoke-virtual \{p0, v0\}, \2->setValue\(Ljava/lang/Object;\)V\s+return-void")
     picks = [mm.group(1) for mm in picker.finditer(re.sub(r"\n\s*\.line \d+", "", s))]
     if len(picks) != 1:
-        raise PatchError(f"выбор модели в чате: найдено {len(picks)}, ожидалось 1")
+        log(f"  выбор модели в чате: найдено {len(picks)}, ожидалось 1, пропускаю")
+        return names
     s = s.replace(picks[0], picks[0] + f"\n    invoke-static/range {{p1 .. p1}}, {MOD}Fake;->pick(Ljava/lang/String;)"
                                        "Ljava/lang/String;\n\n    move-result-object p1\n", 1)
     f.write_text(s)
@@ -907,51 +991,65 @@ def patch_models(sm):
                      r"iget-boolean (\w+), \2, " + re.escape(entry.cls) + "->" + fdis + r":Z\s+if-nez \4, :\w+\n")
     # такая же проверка есть и в меню Code и в других местах; смена модели чата — только там, где есть
     # «когда применить» (enum AtOnce / WithNextSend)
-    timing = class_of(sm.one_with('"WithNextSend"'))
-    taps = []
-    for f in sm.files_with(f"{entry.cls}->{fdis}:Z"):
-        s = f.read_text()
-        for mm in tap.finditer(s):
-            start = s.rfind("\n.method ", 0, mm.start())
-            end = s.find("\n.end method", mm.end())
-            if timing + "->" in s[start:end]:
-                taps.append((f, mm))
-    if len(taps) != 1:
-        raise PatchError(f"тап по модели в меню: найдено {len(taps)}, ожидалось 1")
-    f, mm = taps[0]
-    s = f.read_text()
-    f.write_text(s[:mm.end()] + f"\n    invoke-static/range {{{mm.group(3)} .. {mm.group(3)}}}, {MOD}Fake;->"
-                 "picked(Ljava/lang/String;)V\n" + s[mm.end():])
+    timing_file = sm.files_with('"WithNextSend"')
+    if timing_file:
+        timing = class_of(timing_file[0])
+    else:
+        log("  WithNextSend не найден, смена модели по тапу в меню пропущена")
+        timing = None
+    if timing is not None:
+        taps = []
+        for f in sm.files_with(f"{entry.cls}->{fdis}:Z"):
+            s = f.read_text()
+            for mm in tap.finditer(s):
+                start = s.rfind("\n.method ", 0, mm.start())
+                end = s.find("\n.end method", mm.end())
+                if timing + "->" in s[start:end]:
+                    taps.append((f, mm))
+        if len(taps) != 1:
+            log(f"  тап по модели в меню: найдено {len(taps)}, ожидалось 1, пропускаю")
+        else:
+            f, mm = taps[0]
+            s = f.read_text()
+            f.write_text(s[:mm.end()] + f"\n    invoke-static/range {{{mm.group(3)} .. {mm.group(3)}}}, {MOD}Fake;->"
+                     "picked(Ljava/lang/String;)V\n" + s[mm.end():])
     # и сам тап в шторке «Выбрать модель»: она зовёт выбор модели интерфейса этого класса, d(id)
     pickers = [i for i in re.findall(r"^\.implements (L[^;]+;)$", f.read_text(), re.M)
                if re.search(r"^\.method public abstract d\(Ljava/lang/String;\)L[^;]+;$", sm.file_of(i).read_text(), re.M)]
     if len(pickers) != 1:
-        raise PatchError(f"интерфейс выбора модели: найдено {len(pickers)}")
-    site = re.compile(r"(\n\s+)(invoke-interface \{\w+, (\w+)\}, " + re.escape(pickers[0])
-                      + r"->d\(Ljava/lang/String;\)L[^;]+;\n)")
-    sheet = 0
-    for f in sm.files_with(pickers[0] + "->d(Ljava/lang/String;)"):
-        s, n = site.subn(lambda m: f"{m.group(1)}invoke-static {{{m.group(3)}}}, {MOD}Fake;->picked(Ljava/lang/String;)V\n"
-                         + m.group(1) + m.group(2), f.read_text())
-        sheet += n
-        f.write_text(s)
-    if sheet == 0:
-        raise PatchError("шторка выбора модели: вызов не найден")
+        log(f"  интерфейс выбора модели: найдено {len(pickers)}, шторка не пропатчена")
+    else:
+        site = re.compile(r"(\n\s+)(invoke-interface \{\w+, (\w+)\}, " + re.escape(pickers[0])
+                          + r"->d\(Ljava/lang/String;\)L[^;]+;\n)")
+        sheet = 0
+        for f in sm.files_with(pickers[0] + "->d(Ljava/lang/String;)"):
+            s, n = site.subn(lambda m: f"{m.group(1)}invoke-static {{{m.group(3)}}}, {MOD}Fake;->picked(Ljava/lang/String;)V\n"
+                             + m.group(1) + m.group(2), f.read_text())
+            sheet += n
+            f.write_text(s)
+        if sheet == 0:
+            log("  шторка выбора модели: вызов не найден")
 
     # ModelId{default, identifier} в запросах нового API. ModelId(String) приложение создаёт само для отправки
     # и смены модели беседы, основной конструктор зовёт ещё и разбор ответов сервера.
-    f = sm.one_with('"type.googleapis.com/anthropic.bard.api.v1alpha.ModelId"')
+    model_id_files = sm.files_with('"type.googleapis.com/anthropic.bard.api.v1alpha.ModelId"')
+    if len(model_id_files) == 0:
+        log("  protobuf ModelId не найден, мемная модель не будет отправлена вместо настоящей")
+        return names
+    f = model_id_files[0]
     s = f.read_text()
-    s = sub_once(s, r"(\.method public synthetic constructor <init>\(Ljava/lang/String;\)V\n\s+\.locals \d+\n)",
+    s = sub_once(s, r"(\.method public (?:synthetic )?constructor <init>\(Ljava/lang/String;\)V\n\s+\.locals \d+\n)",
                  r"\1\n    invoke-static/range {p1 .. p1}, " + MOD + r"Fake;->send(Ljava/lang/String;)Ljava/lang/String;"
                  r"\n\n    move-result-object p1\n", "ModelId(String)")
     ctors = [m for m in re.finditer(r"\.method public constructor <init>\(([^)]*)\)V\n\s+\.locals \d+\n", s)
              if "Ljava/lang/String;" in m.group(1)]
     if len(ctors) != 1:
-        raise PatchError(f"ModelId: конструкторов со строкой {len(ctors)}, ожидался один")
+        log(f"  ModelId: конструкторов со строкой {len(ctors)}, ожидался один, пропускаю")
+        return names
     types = PARAM.findall(ctors[0].group(1))
     if types.count("Ljava/lang/String;") != 1:
-        raise PatchError("ModelId: ожидалась одна строка (identifier)")
+        log("  ModelId: ожидалась одна строка (identifier), пропускаю")
+        return names
     reg = 1 + sum(2 if t in ("J", "D") else 1 for t in types[:types.index("Ljava/lang/String;")])
     f.write_text(s.replace(ctors[0].group(0), ctors[0].group(0)
                            + f"\n    invoke-static/range {{p{reg} .. p{reg}}}, {MOD}Fake;->real(Ljava/lang/String;)"
@@ -1299,14 +1397,14 @@ def session_names(sm):
         for key, serial, fields in (("SESSION_EVENT", "SdkMessageEvent", ("message", "uuid", "session_id")),
                                     ("SESSION_ASSISTANT", "SdkAssistantMessage", ("content",)),
                                     ("SESSION_USER", "SdkNonAssistantMessage", ("role", "content")),
-                                    ("SESSION_TEXT", "ContentBlock.Text", ("text",)),
-                                    ("SESSION_USER_TEXT", "ApiUserMessageContent.Text", ("text",))):
+                                    ("SESSION_TEXT", "SdkTextContent", ("text",)),
+                                    ("SESSION_USER_TEXT", "SdkTextContent", ("text",))):
             ser = Serial(sm, base + serial)
             out[key] = dict(cls=ser.cls[1:-1].replace("/", "."), **ser.fields(*fields))
             if key == "SESSION_EVENT":
                 # каждое разобранное событие — в память мода (история сессии и поток): Export.event(this)
                 text = ser.file.read_text()
-                method = re.search(r"\.method public synthetic constructor <init>\(I[\s\S]*?\.end method", text).group(0)
+                method = re.search(r"\.method public (?:synthetic )?constructor <init>\([I\s\S]*?\.end method", text).group(0)
                 hooked = method.replace("    return-void\n", f"    invoke-static/range {{p0 .. p0}}, {MOD}Export;->"
                                         "event(Ljava/lang/Object;)V\n\n    return-void\n")
                 ser.file.write_text(text.replace(method, hooked, 1))
@@ -1380,8 +1478,15 @@ def limit_abi(dec, abi):
     if abi == "all":
         return
     lib = dec / "lib"
+    if not lib.exists():
+        log("  нативных библиотек нет, ограничивать архитектуру нечего")
+        return
     if not (lib / abi).exists():
-        raise PatchError(f"в APK нет библиотек для {abi}")
+        dirs = [d.name for d in lib.iterdir() if d.is_dir()]
+        if dirs:
+            raise PatchError(f"в APK нет библиотек для {abi}, есть: {', '.join(dirs)}")
+        log("  нативных библиотек нет, ограничивать архитектуру нечего")
+        return
     for d in lib.iterdir():
         if d.name != abi:
             shutil.rmtree(d)
@@ -1392,11 +1497,29 @@ def limit_abi(dec, abi):
     y.write_text(re.sub(r"\n\s*- so\n", "\n", y.read_text()))
 
 
+MISSING_STRING = ("DRAWER_ITEM", "FUNCTION0", "FUNCTION2", "UNIT",
+                  "FAKE_ENTRY", "FAKE_OPTION", "FAKE_AVAILABLE",
+                  "CONV_TITLE", "SESSION_EVENT", "SESSION_ASSISTANT", "SESSION_USER",
+                  "SESSION_TEXT", "SESSION_USER_TEXT",
+                  "SEMANTICS_DELEGATE", "SEMANTICS_STALE", "SEMANTICS_NODES",
+                  "CLAWD", "COMPOSE_VIEW", "CLAWD_METHOD", "MODIFIER",
+                  "CLAWD_ANIM", "CLAWD_SHEET", "CLAWD_FRAMES", "CLAWD_FRAMES_METHOD",
+                  "MENU_ITEM", "MENU_ITEM_METHOD", "PAINTER", "PAINTER_METHOD",
+                  "ICON", "MENU_DEFAULTS")
+
+
 def build_dex(work, tools, names):
     out = work / "modbuild"
     shutil.rmtree(out, ignore_errors=True)
     gen = out / "gen/cat/clawdio/mods"
     gen.mkdir(parents=True)
+    # отсутствующие константы заполняем заглушками: без них src/ не соберётся
+    names = dict(names)
+    for k in MISSING_STRING:
+        names.setdefault(k, "")
+    for k in ("DARK_PALETTE", "LIGHT_PALETTE"):
+        names.setdefault(k, [])
+    names.setdefault("CONV_TITLE", {})
     body = ""
     for k, v in sorted(names.items()):
         if isinstance(v, list):
@@ -1470,10 +1593,26 @@ def main():
     work = pathlib.Path(a.work or tempfile.mkdtemp(prefix="claude-mods-"))
     work.mkdir(parents=True, exist_ok=True)
     try:
-        merged = merge_input(a.input, work, tools)
         dec = work / "dec"
-        log("apktool d")
-        run(["java", "-jar", tools / "apktool.jar", "d", "-f", merged, "-o", dec])
+        pristine = work / "decoded"
+        src = pathlib.Path(a.input)
+        stamp = f"{src.resolve()}|{src.stat().st_size if src.is_file() else 0}"
+        marker = pristine / ".source"
+        if pristine.exists() and (pristine / "AndroidManifest.xml").exists() and marker.exists() \
+                and marker.read_text() == stamp:
+            # разобранный APK сохраняем нетронутым: патчи меняют файлы на месте
+            log("использую уже разобранный APK")
+            shutil.rmtree(dec, ignore_errors=True)
+            shutil.copytree(pristine, dec)
+        else:
+            shutil.rmtree(pristine, ignore_errors=True)
+            shutil.rmtree(dec, ignore_errors=True)
+            merged = merge_input(a.input, work, tools)
+            log("apktool d")
+            run(["java", "-jar", tools / "apktool.jar", "d", "-f", merged, "-o", pristine])
+            marker = pristine / ".source"
+            marker.write_text(stamp)
+            shutil.copytree(pristine, dec)
 
         log("патчи")
         app = patch_manifest(dec)
@@ -1494,7 +1633,8 @@ def main():
             ("модели", lambda: names.update(patch_models(sm))),
             ("Clawd", lambda: names.update(find_clawd(sm))),
             ("меню чата", lambda: names.update(patch_chat_menu(sm, dec))),
-            ("вход через Google", lambda: patch_google_login(sm, dec, names["FUNCTION0"])),
+            ("вход через Google", lambda: patch_google_login(sm, dec, names["FUNCTION0"])
+             if "FUNCTION0" in names else raise_missing("пункт меню не найден (не к чему привязать)")),
             ("темы", lambda: names.update(patch_theme(sm))),
         ]
         broken = []
@@ -1503,15 +1643,19 @@ def main():
                 step()
             except Exception as e:
                 broken.append((title, str(e) if isinstance(e, PatchError) else repr(e)))
-                if not a.check:
-                    raise
                 log(f"  ! {title}: {broken[-1][1]}")
+        if any(t == "журнал вылетов" for t, _ in broken):
+            raise PatchError("патч Application.onCreate не найден: мод не запустится, сборка остановлена")
         if a.check:
             report(broken)
             if broken:
                 sys.exit(1)
             log("все хуки нашлись — можно собирать")
             return
+        if broken:
+            log("  ВНИМАНИЕ: сборка с ограничениями — часть возможностей мода не работает:")
+            for t, e in broken:
+                log(f"    - {t}")
         palettes = names
         log(f"  перенесено пропатченных классов: {move_patched(sm)}")
         limit_abi(dec, a.abi)
