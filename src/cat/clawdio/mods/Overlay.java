@@ -13,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.util.Calendar;
@@ -35,6 +36,15 @@ final class Overlay {
 
     static void setCounter(boolean on) throws Exception {
         Mods.prefs().edit().putBoolean("counter_on", on).apply();
+    }
+
+    /** Кнопка «Моды» поверх экранов Claude: вход в мод, когда пункта в боковом меню нет. */
+    static boolean buttonOn() {
+        return pref("button_on", true);
+    }
+
+    static void setButtonOn(boolean on) throws Exception {
+        Mods.prefs().edit().putBoolean("button_on", on).apply();
     }
 
     /** off, auto, snow, leaves, petals, stars. */
@@ -112,7 +122,7 @@ final class Overlay {
         if (content == null) {
             return;
         }
-        boolean wanted = counter() || !"off".equals(effectiveSeason());
+        boolean wanted = buttonOn() || counter() || !"off".equals(effectiveSeason());
         Layer layer = find(a);
         if (!wanted) {
             if (layer != null) {
@@ -137,6 +147,9 @@ final class Overlay {
         private final Pet.Semantics semantics = new Pet.Semantics();
         private final TextView count;
         private final Particles particles;
+        private final ImageView button;
+        private float downX, downY, startX, startY;
+        private boolean dragged, placed;
         private View host;
         private boolean running;
         private int polls;
@@ -169,10 +182,62 @@ final class Overlay {
             count = ui.label("", 12, ui.secondary, ui.regular);
             count.setVisibility(INVISIBLE);
             addView(count, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+            button = new ImageView(a);
+            int icon = Mods.res(a, "clawdio_icon_fg_clawd", "drawable");
+            if (icon != 0) {
+                button.setImageResource(icon);
+            } else {
+                button.setImageResource(android.R.drawable.ic_menu_manage);
+            }
+            button.setBackground(ui.ripple(ui.round(0xF2FFFFFF, 22), 22));
+            button.setElevation(dp(6));
+            button.setContentDescription(L.t("Моды"));
+            button.setVisibility(GONE);
+            button.setOnTouchListener((v, e) -> {
+                switch (e.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        startX = button.getX();
+                        startY = button.getY();
+                        dragged = false;
+                        return true;
+                    case android.view.MotionEvent.ACTION_MOVE:
+                        float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
+                        if (Math.abs(dx) > dp(6) || Math.abs(dy) > dp(6)) {
+                            dragged = true;
+                        }
+                        if (dragged) {
+                            button.setX(Math.max(0, Math.min(startX + dx, getWidth() - button.getWidth())));
+                            button.setY(Math.max(0, Math.min(startY + dy, getHeight() - button.getHeight())));
+                        }
+                        return true;
+                    case android.view.MotionEvent.ACTION_UP:
+                        if (!dragged) {
+                            Mods.open();
+                        }
+                        return true;
+                    default:
+                        return true;
+                }
+            });
+            LayoutParams lp = new LayoutParams(dp(44), dp(44));
+            lp.gravity = Gravity.TOP | Gravity.START;
+            addView(button, lp);
+            button.post(() -> {
+                if (!placed) {
+                    placed = true;
+                    button.setX(dp(10));
+                    button.setY(Math.max(dp(80), getHeight() / 3f));
+                }
+                button.setVisibility(buttonOn() ? VISIBLE : GONE);
+            });
         }
 
         void start() {
             particles.setKind(effectiveSeason());
+            button.setVisibility(buttonOn() ? VISIBLE : GONE);
             if (!running) {
                 running = true;
                 handler.post(tick);

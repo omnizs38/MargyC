@@ -43,8 +43,9 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 | 🤡 **Meme models** | add "Fable 6969" to the model picker. A real model of your choice answers, with its own system prompt on top. Share models as text |
 | 🦀 **Clawd pet** | the app's own animated Clawd sits on top of the message box in chat and Code, follows it as it grows, can be dragged around and jumps when tapped. While Claude answers he types on a laptop, then jumps or dances — with Claude's own animations |
 | 🔒 **App lock** | open Claude with your fingerprint, face or PIN; hide the chat in recent apps |
-| 📝 **Conversation export** | "Download conversation (.md)" in the chat's ⋮ menu; open a .md on the Mods screen to read it as a chat and continue it in Claude |
+| 📝 **Conversation export** | "Download conversation (.md)" in the chat's ⋮ menu; open a .md on the Mods screen to read it as a chat and continue it in Claude. If the ⋮ menu has no Clawdio items, **Last conversation** in Mods → Dialogs exports or searches the latest cached chat |
 | 🔍 **Search in chat** | "Find in chat" in the same ⋮ menu: the whole conversation with matches highlighted, arrows jump between them; a character counter at the message box |
+| 🪟 **Mods button** | a small draggable Clawd on the edge of Claude's screen: tap to open Mods, hold and drag to move it; can be turned off in Mods → Pet |
 | 📊 **Claude in numbers** | messages, active days, streak, busiest day, favourite model and an hours chart — counted on the phone only |
 | 🎮 **Clawd widget & game** | a home screen widget with Clawd and today's messages; a mini-game where Clawd jumps over bugs |
 | 🧩 **Custom mods** | install `.mcmod` plugins: compiled dex with a manifest, settings drawn by the app, or pick one from the built-in catalog. [Write your own](docs/plugins.md) |
@@ -54,8 +55,9 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 | 🌐 **Russian or English** | the Mods screen follows the app language |
 | 💥 **Crash log & journal** | if the app crashes, the next start shows the stack trace; the Clawdio journal at the bottom of the Mods screen shows what the hooks did, to copy and send |
 
-Everything lives in **Моды** (Mods) in the side menu. Changes that need a restart pile up, and a bar at
-the bottom of the Mods screen restarts Claude once when you are done.
+Everything lives in **Моды** (Mods) — in the side menu, on the in-app Clawd button, or on the
+app's shortcut. Changes that need a restart pile up, and a bar at the bottom of the Mods screen
+restarts Claude once when you are done.
 
 ## Install
 

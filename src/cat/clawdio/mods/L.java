@@ -254,6 +254,9 @@ final class L {
         put("Готовые темы: AMOLED, Material You, Catppuccin, Nord и другие.", "Ready themes: AMOLED, Material You, Catppuccin, Nord and more.");
         put("Шрифт", "Font");
         put("Реагирует на ответы", "Reacts to replies");
+        put("Кнопка «Моды» на экране", "Mods button on screen");
+        put("Маленький Clawd на краю экрана Claude: коснись — откроются моды, зажми и тащи — куда поставить.",
+                "A small Clawd on the edge of Claude's screen: tap to open Mods, hold and drag to move it.");
         put("Пока Claude отвечает, Clawd печатает на ноутбуке, а потом прыгает или танцует. Анимации — самого Claude.", "While Claude replies, Clawd types on a laptop, then jumps or dances. The animations are Claude's own.");
         put("Каталог модов", "Mod catalog");
         put("Моды из репозитория Clawdio: установка в одно касание.", "Mods from the Clawdio repository, installed in one tap.");
@@ -420,6 +423,9 @@ final class L {
         put("По времени года", "By season");
         put("По-русски, по времени суток", "In Russian, by time of day");
         put("Поиск в чате", "Search in chat");
+        put("Последний диалог", "Last conversation");
+        put("Если пунктов в меню «⋮» нет: скачать или найти последнюю беседу из кэша приложения.",
+                "If the chat ⋮ menu has no Clawdio items: export or search the latest conversation from the app cache.");
         put("При запуске Claude на секунду появляется Clawd на фоне твоей темы.", "When Claude starts, Clawd shows for a second on your theme's background.");
         put("Приветствие", "Greeting");
         put("Приходит с сервера Claude, обычно по-английски.", "Comes from Claude's server, usually in English.");

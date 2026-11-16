@@ -694,6 +694,18 @@ public final class ModsActivity extends Activity {
         });
         react.icon(IC_REACT);
         g.addView(react);
+        Ui.Row button = ui.new Row(L.t("Кнопка «Моды» на экране"),
+                L.t("Маленький Clawd на краю экрана Claude: коснись — откроются моды, зажми и тащи — куда поставить."));
+        button.toggle(Overlay.buttonOn(), true, on -> {
+            try {
+                Overlay.setButtonOn(on);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        });
+        button.icon(IC_PET);
+        g.addView(button);
         Ui.Row widget = ui.new Row(L.t("Виджет на рабочий стол"),
                 L.t("Clawd с приветствием и сообщениями за сегодня. Ночью спит, днём за ноутбуком; коснись — подпрыгнет."));
         widget.icon(IC_WIDGET);
@@ -1005,6 +1017,15 @@ public final class ModsActivity extends Activity {
         });
         search.icon(IC_SEARCH);
         g.addView(search);
+        Ui.Row latest = ui.new Row(L.t("Последний диалог"),
+                L.t("Если пунктов в меню «⋮» нет: скачать или найти последнюю беседу из кэша приложения."));
+        latest.chevron();
+        latest.setOnClickListener(v -> ui.new Sheet(L.t("Последний диалог"))
+                .button(L.t("Найти в чате"), false, () -> new Thread(Export::searchLatest, "Clawdio search").start())
+                .button(L.t("Скачать .md"), true, () -> new Thread(Export::saveLatest, "Clawdio export").start())
+                .show());
+        latest.icon(IC_DOWNLOAD);
+        g.addView(latest);
         Ui.Row open = ui.new Row(L.t("Открыть диалог .md"),
                 L.t("Экспорт Clawdio или любой .md с заголовками «## Ты» / «## Claude»: посмотреть как чат и продолжить в Claude."));
         open.chevron();

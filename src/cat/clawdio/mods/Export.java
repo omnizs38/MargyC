@@ -232,6 +232,88 @@ public final class Export {
         }
     }
 
+    /**
+     * Запасной экспорт, когда пункта в меню чата нет: берём последнюю беседу из локального
+     * кэша приложения (обычно это открытый или только что открытый чат) и сохраняем её.
+     */
+    static void saveLatest() {
+        Context ctx;
+        try {
+            ctx = Mods.app();
+        } catch (Exception e) {
+            return;
+        }
+        try {
+            Conversation c = latest(ctx);
+            if (c == null) {
+                toast(ctx, L.t("В кэше приложения нет диалогов. Открой чат и попробуй ещё раз."));
+                return;
+            }
+            write(ctx, c);
+        } catch (Throwable t) {
+            Log.e(Mods.TAG, "export latest", t);
+            toast(ctx, L.t("Не получилось сохранить: ") + t);
+        }
+    }
+
+    /** Запасной поиск по последней беседе из кэша. */
+    static void searchLatest() {
+        try {
+            Conversation c = latest(Mods.app());
+            if (c == null) {
+                ChatSearch.notFound();
+                return;
+            }
+            ChatSearch.open(c);
+        } catch (Throwable t) {
+            Log.e(Mods.TAG, "search latest", t);
+            Fake.log("search latest error: " + t);
+        }
+    }
+
+    private static Conversation latest(Context ctx) {
+        for (String name : ctx.databaseList()) {
+            if (name.endsWith("-journal") || name.endsWith("-wal") || name.endsWith("-shm")) {
+                continue;
+            }
+            SQLiteDatabase db = null;
+            try {
+                db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).getPath(), null, SQLiteDatabase.OPEN_READONLY);
+                String id = latestId(db);
+                if (id != null) {
+                    Conversation c = load(ctx, id);
+                    if (c != null) {
+                        return c;
+                    }
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                if (db != null) {
+                    db.close();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String latestId(SQLiteDatabase db) {
+        String[][] queries = {
+                {"snapshot_messages", "SELECT conversation_id FROM snapshot_messages GROUP BY conversation_id ORDER BY MAX(rowid) DESC LIMIT 1"},
+                {"cachedMessages", "SELECT conversation_uuid FROM cachedMessages GROUP BY conversation_uuid ORDER BY MAX(rowid) DESC LIMIT 1"},
+        };
+        for (String[] q : queries) {
+            if (!hasTable(db, q[0])) {
+                continue;
+            }
+            try (Cursor c = db.rawQuery(q[1], null)) {
+                if (c.moveToFirst() && c.getString(0) != null) {
+                    return c.getString(0);
+                }
+            }
+        }
+        return null;
+    }
+
     /** Беседа, открытая в чате: uuid из параметров меню, сообщения из кэша. */
     private static Conversation find(Context ctx, List<Object> roots) {
         Set<String> ids = uuids(roots);
