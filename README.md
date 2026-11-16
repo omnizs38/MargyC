@@ -14,7 +14,7 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 <a href="https://github.com/omnizs38/MargyC/raw/Download/Clawdio.apk"><img src="https://img.shields.io/badge/Download-APK-8FD2B1?style=for-the-badge&logo=android&logoColor=white" alt="Download APK"></a>
 <a href="docs/plugins.md"><img src="https://img.shields.io/badge/Write_a_mod-docs-D97757?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Write a mod"></a>
 
-<img src="https://img.shields.io/badge/version-1.4.0-555?style=flat-square" alt="version 1.4.0">
+<img src="https://img.shields.io/badge/version-1.4.1-555?style=flat-square" alt="version 1.4.1">
 <img src="https://img.shields.io/badge/Android-10%2B-555?style=flat-square&logo=android" alt="Android 10+">
 <img src="https://img.shields.io/badge/arch-arm64--v8a-555?style=flat-square" alt="arm64-v8a">
 <img src="https://img.shields.io/badge/license-GPL--3.0-555?style=flat-square" alt="GPL-3.0">
@@ -48,6 +48,7 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 | 📊 **Claude in numbers** | messages, active days, streak, busiest day, favourite model and an hours chart — counted on the phone only |
 | 🎮 **Clawd widget & game** | a home screen widget with Clawd and today's messages; a mini-game where Clawd jumps over bugs |
 | 🧩 **Custom mods** | install `.mcmod` plugins: compiled dex with a manifest, settings drawn by the app, or pick one from the built-in catalog. [Write your own](docs/plugins.md) |
+| 🗂️ **Model menu** | hide the Claude models you never use right in Mods → Meme models → Models in the menu; meme models stay |
 | 🔄 **Updates** | Clawdio checks for new versions itself, downloads the APK and checks its signature before offering it; turn on the beta channel to get betas first |
 | 🧭 **Claude compatibility** | if Claude updates under the mod, the Mods screen says so and copies a report with versions and the journal — send it and it gets fixed |
 | 🌐 **Russian or English** | the Mods screen follows the app language |
@@ -74,8 +75,10 @@ would not install over the current one, so it is not offered.
 
 ## Build from source
 
-You need Python 3.8+ and JDK 17+. The other tools (apktool, APKEditor, d8, uber-apk-signer,
-android.jar) are downloaded to `~/.cache/claude-mods` on first run.
+You need Python 3.8+ and JDK 17+. The build tools (apktool, APKEditor, d8,
+uber-apk-signer, android.jar) are in [`vendor/`](vendor) with checksums, so the build does not
+need the network. `CLAUDE_MODS_TOOLS` points the patcher at another folder if you keep your own
+copies.
 
 ```sh
 python3 patcher.py com.anthropic.claude_<version>.xapk -o Clawdio.apk
@@ -125,6 +128,7 @@ server*. See [docs/SELF-HOST.md](docs/SELF-HOST.md).
 | Path | | |
 |---|---|---|
 | [`config.json`](config.json) | brand, package, update channel, author and donation details of this build |
+| [`vendor`](vendor) | build tools (apktool, APKEditor, d8, uber-apk-signer, android.jar) with SHA-256 checksums — the build works offline |
 | [`patcher.py`](patcher.py) | XAPK → merged APK → manifest, resource and smali patches → build → sign |
 | [`src/cat/clawdio/mods`](src/cat/clawdio/mods) | the mod itself: Mods screen, themes, prompt, meme models, Clawd, plugin loader |
 | [`src/cat/clawdio/mods/api`](src/cat/clawdio/mods/api) | the API for custom mods |
@@ -133,7 +137,8 @@ server*. See [docs/SELF-HOST.md](docs/SELF-HOST.md).
 | [`tools/build_mod.py`](tools/build_mod.py) | builds a `.mcmod` |
 | [`tools/release.py`](tools/release.py) | builds and publishes a release |
 | [`tools/typecheck.py`](tools/typecheck.py) | compiles the mod's code without the original APK |
-| [`res/values-ru`](res/values-ru) | the Russian translation |
+| [`tools/check_translations.py`](tools/check_translations.py) | checks translations: keys, placeholders, coverage |
+| [`translations/ru`](translations/ru) | the Russian translation; `translations/en` is the English source it is matched against |
 
 ## Support the author
 

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string-array name="assume_strong_biometrics_models">
+    <item>Pixel 4</item>
+    <item>Pixel 4 XL</item>
+  </string-array>
+  <string-array name="category_names">
+    <item>@string/emoji_category_emotions</item>
+    <item>@string/emoji_category_people</item>
+    <item>@string/emoji_category_animals_nature</item>
+    <item>@string/emoji_category_food_drink</item>
+    <item>@string/emoji_category_travel_places</item>
+    <item>@string/emoji_category_activity</item>
+    <item>@string/emoji_category_objects</item>
+    <item>@string/emoji_category_symbols</item>
+    <item>@string/emoji_category_flags</item>
+  </string-array>
+  <string-array name="crypto_fingerprint_fallback_vendors">
+    <item>samsung</item>
+  </string-array>
+  <string-array name="delay_showing_prompt_models">
+    <item>Pixel 4</item>
+    <item>Pixel 4 XL</item>
+  </string-array>
+  <string-array name="hide_fingerprint_instantly_prefixes">
+    <item>SM-A50</item>
+    <item>SM-G973</item>
+    <item>SM-G975</item>
+    <item>SM-G977</item>
+    <item>SM-G770</item>
+    <item>SM-N970</item>
+    <item>SM-N971</item>
+    <item>SM-N975</item>
+    <item>SM-N976</item>
+    <item>SM-N770</item>
+    <item>SC-03L</item>
+    <item>SC-04L</item>
+    <item>SC-05L</item>
+    <item>SC-01M</item>
+    <item>SCV41</item>
+    <item>SCV42</item>
+    <item>SCV45</item>
+  </string-array>
+  <string-array name="max_upsell_feature_list_default">
+    <item>Substantially more usage to work with Claude without interruption</item>
+    <item>Scale usage based on specific needs</item>
+    <item>Be among the first to try the most advanced Claude capabilities</item>
+  </string-array>
+  <string-array name="onboarding_v2_subscription_free_features">
+    <item>Chat with Claude, a helpful AI assistant</item>
+    <item>Upload files and images for analysis</item>
+    <item>Basic usage limits</item>
+  </string-array>
+  <string-array name="pro_upsell_feature_list_default">
+    <item>Level up your Claude usage</item>
+    <item>Access to our most intelligent models</item>
+    <item>Priority access during high-traffic periods</item>
+    <item>Early access to new features</item>
+  </string-array>
+  <string-array name="thinking_timeline_verbs">
+    <item>Thinking</item>
+    <item>Sifting</item>
+    <item>Fathoming</item>
+    <item>Honing</item>
+    <item>Weighing</item>
+    <item>Pondering</item>
+    <item>Contemplating</item>
+    <item>Cogitating</item>
+    <item>Picturing</item>
+    <item>Musing</item>
+    <item>Figuring</item>
+    <item>Reckoning</item>
+    <item>Mulling</item>
+    <item>Triangulating</item>
+    <item>Crystallizing</item>
+    <item>Sleuthing</item>
+    <item>Untangling</item>
+  </string-array>
+</resources>

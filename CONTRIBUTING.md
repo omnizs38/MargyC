@@ -17,7 +17,8 @@ python3 patcher.py com.anthropic.claude_<version>.xapk -o Clawdio.apk
 ```
 
 Needs Python 3.8+, JDK 17+ and the original Claude APK (XAPK / APKS / APKM / a folder of splits /
-an APK). The build tools are downloaded to `~/.cache/claude-mods` on the first run.
+an APK). The build tools are in `vendor/` with checksums, so no network is needed; a missing or
+tampered file is reported instead of being silently used.
 
 Without the original APK you can still compile the mod's own code:
 
@@ -33,8 +34,10 @@ python3 tools/typecheck.py
 | `src/cat/clawdio/mods/api/` | the plugin API — mods are written against it |
 | `patcher.py` | patches Claude's smali, manifest and resources; every hook lives in a `patch_*` function |
 | `config.json` | brand, package, update channel, author, donation details |
-| `res/` | the mod's own resources and the translations of Claude's strings |
-| `tools/` | build, typecheck, release and channel-checking scripts |
+| `res/` | the mod's own resources (widget, icons, colors) |
+| `translations/` | Claude's strings: `en` is the source, `ru` / `be` / `kk` are matched to obfuscated resource names by text |
+| `vendor/` | build tools with SHA-256 checksums, so the build works offline |
+| `tools/` | build, typecheck, translation and release scripts |
 
 ## Making a change
 

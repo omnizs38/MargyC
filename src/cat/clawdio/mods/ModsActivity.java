@@ -757,11 +757,59 @@ public final class ModsActivity extends Activity {
         add.setOnClickListener(v -> editFake(null));
         add.icon(IC_ADD);
         fakeGroup.addView(add);
+        Ui.Row picker = ui.new Row(L.t("Модели в меню"), modelMenuSub());
+        picker.setOnClickListener(v -> chooseModels());
+        picker.chevron();
+        fakeGroup.addView(picker);
         Ui.Row paste = ui.new Row(L.t("Вставить модель"), L.t("Из буфера обмена: модель, которой с тобой поделились."));
         paste.setOnClickListener(v -> importFake());
         paste.icon(IC_PASTE);
         fakeGroup.addView(paste);
         ui.restyle(fakeGroup);
+    }
+
+    private String modelMenuSub() {
+        int hidden = Fake.hidden().size();
+        return hidden == 0 ? L.t("Все модели Claude видны в меню.")
+                : L.t("Скрыто моделей: ") + hidden;
+    }
+
+    /** Список моделей клиента: лишние можно спрятать, они не будут мешать в выборе. */
+    private void chooseModels() {
+        final java.util.Map<String, String> real = Fake.realModels();
+        if (real.isEmpty()) {
+            ui.new Sheet(L.t("Нет списка моделей"))
+                    .message(L.t("Мод ещё не видел список моделей Claude. Открой чат, чтобы приложение его загрузило, и возвращайся."))
+                    .button(L.t("Понятно"), true, null).show();
+            return;
+        }
+        final Ui.Sheet sheet = ui.new Sheet(L.t("Модели в меню"));
+        sheet.message(L.t("Скрытые модели не мешают в списке выбора. Настоящая модель для ответа выбирается здесь же, в мемных моделях."));
+        LinearLayout box = ui.column();
+        for (final java.util.Map.Entry<String, String> e : real.entrySet()) {
+            Ui.Row row = ui.new Row(e.getValue().isEmpty() ? e.getKey() : e.getValue(), e.getKey());
+            row.toggle(!Fake.isHidden(e.getKey()), true, on -> {
+                try {
+                    Fake.hide(e.getKey(), !on);
+                    return true;
+                } catch (Exception ex) {
+                    Log.e(Mods.TAG, "hide model", ex);
+                    return false;
+                }
+            });
+            box.addView(row);
+        }
+        ui.restyle(box);
+        sheet.view(box);
+        sheet.button(L.t("Показать все"), false, () -> {
+            try {
+                Fake.showAll();
+            } catch (Exception ignored) {
+            }
+            refresh();
+            sheet.dialog.dismiss();
+        });
+        sheet.button(L.t("Закрыть"), true, this::refresh).show();
     }
 
     private void editFake(final Fake.Model m) {

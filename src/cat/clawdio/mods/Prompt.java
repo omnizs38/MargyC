@@ -323,7 +323,8 @@ public final class Prompt {
                 + "checks with an optional beta channel; system prompt presets (this text); meme models: fake models on top of the model "
                 + "picker, answered by a real model, with their own prompt, shared as text in this format:\n"
                 + "Clawdio model\nname: Fable 6969\ndescription: one line\nbase: <real model id>\nprompt:\n<prompt to the end>\n"
-                + "(the user pastes it via Meme models -> Paste a model); Clawd pet on the message box that types on a laptop while "
+                + "(the user pastes it via Meme models -> Paste a model); hiding Claude models the user does not need "
+                + "(Meme models -> Models in the menu); Clawd pet on the message box that types on a laptop while "
                 + "Claude answers and jumps or dances when the answer is ready; conversation "
                 + "export to .md from the chat's menu and opening .md as a chat; custom mods (.mcmod plugins: dex + "
                 + "manifest.json, also a one-tap mod catalog, docs at " + docsUrl() + "); crash log and journal.");

@@ -5,10 +5,9 @@
 
 Компилирует src/ как это делает patcher.py (javac --release 8 против android.jar),
 но вместо настоящего Names.java берёт заглушку tools/typecheck/Names.java.
-Нужен JDK 17+; android.jar и r8 скачиваются в ~/.cache/claude-mods при первом запуске.
+Нужен JDK 17+; android.jar и r8 уже лежат в vendor/ — сеть не нужна.
 """
 import pathlib
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,18 +18,8 @@ import patcher  # noqa: E402
 
 
 def tools():
-    d = patcher.tools_dir()
-    if not (d / "android.jar").exists():
-        z = d / "platform.zip"
-        patcher.download(patcher.PLATFORM_ZIP, z)
-        import zipfile
-        with zipfile.ZipFile(z) as zf:
-            entry = next(n for n in zf.namelist() if n.endswith("/android.jar"))
-            (d / "android.jar").write_bytes(zf.read(entry))
-        z.unlink()
-    if not shutil.which("javac"):
-        raise patcher.PatchError("javac не найден, нужна JDK 17+")
-    return d
+    # vendor/ рядом с репозиторием: без сети; иначе кэш ~/.cache/claude-mods
+    return patcher.ensure_tools()
 
 
 def main():

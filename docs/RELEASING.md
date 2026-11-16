@@ -29,10 +29,10 @@ Everything here is scripted; no manual steps, no secrets in the repository.
 
 ```sh
 # 0. check first: find every hook and see what broke, without building
-python3 patcher.py com.anthropic.claude_26100220.xapk --check
+python3 patcher.py com.anthropic.claude_26110619.xapk --check
 
 # 1. build from the current Claude
-python3 tools/release.py build com.anthropic.claude_26100220.xapk -o Clawdio.apk
+python3 tools/release.py build com.anthropic.claude_26110619.xapk -o Clawdio.apk
 
 # 2. bump the version in src/cat/clawdio/mods/Mods.java (VERSION) — the channel must match it
 
@@ -54,7 +54,7 @@ when Claude has moved on.
 `publish` writes the version, the SHA-256 of the APK and the file size into `version.json`:
 
 ```json
-{"release": {"version": "1.4.0", "beta": 0, "apk": "Clawdio.apk", "notes": "...",
+{"release": {"version": "1.4.1", "beta": 0, "apk": "Clawdio.apk", "notes": "...",
              "sha256": "...", "size": 30900000}}
 ```
 

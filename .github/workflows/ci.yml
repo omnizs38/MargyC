@@ -24,6 +24,12 @@ jobs:
       - name: Код мода собирается
         run: python3 tools/typecheck.py
 
+      - name: Инструменты сборки на месте и не подменены
+        run: cd vendor && sha256sum -c SHA256SUMS
+
+      - name: Переводы и плейсхолдеры
+        run: python3 tools/check_translations.py
+
       - name: Python-скрипты без ошибок
         run: python3 -m compileall -q patcher.py tools
 
@@ -43,7 +49,7 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys, xml.etree.ElementTree as ET
           bad = []
-          for p in pathlib.Path("res").rglob("*.xml"):
+          for p in list(pathlib.Path("res").rglob("*.xml")) + list(pathlib.Path("translations").rglob("*.xml")):
               try:
                   ET.parse(p)
               except Exception as e:

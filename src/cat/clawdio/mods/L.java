@@ -117,6 +117,13 @@ final class L {
         put("Скопировать", "Copy");
         put("Скопировано", "Copied");
         put("Нет списка моделей", "No model list yet");
+        put("Модели в меню", "Models in the menu");
+        put("Все модели Claude видны в меню.", "All Claude models are shown in the menu.");
+        put("Скрытые модели не мешают в списке выбора. Настоящая модель для ответа выбирается здесь же, в мемных моделях.",
+                "Hidden models stay out of the model picker. The real model that answers is picked here, in meme models.");
+        put("Скрыто моделей: ", "Hidden models: ");
+        put("Показать все", "Show all");
+        put("Скрыть модель", "Hide model");
         put("Мод ещё не видел список моделей Claude. Открой чат, чтобы приложение его загрузило, и возвращайся.",
                 "The mod hasn't seen Claude's model list yet. Open a chat so the app loads it, then come back.");
         put("Название, например Fable 6969", "Name, e.g. Fable 6969");

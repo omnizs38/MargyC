@@ -5,15 +5,14 @@
     python3 tools/build_mod.py my-mod -o my-mod.mcmod
 
 The folder holds manifest.json, src/**/*.java, an optional icon.png and optional libs/*.jar
-(bundled into the dex). Needs Python 3.8+ and JDK 17+; d8 and android.jar are downloaded to
-~/.cache/claude-mods on first run. See docs/plugins.md.
+(bundled into the dex). Needs Python 3.8+ and JDK 17+; d8 and android.jar are in
+vendor/, so no network is needed. See docs/plugins.md.
 """
 import argparse
 import json
 import os
 import pathlib
 import re
-import shutil
 import sys
 import tempfile
 import zipfile
@@ -26,20 +25,8 @@ API_SOURCES = ROOT / "src" / "cat" / "clawdio" / "mods" / "api"
 
 
 def tools():
-    d = patcher.tools_dir()
-    if not (d / "r8.jar").exists():
-        patcher.download(patcher.TOOLS["r8.jar"], d / "r8.jar")
-    if not (d / "android.jar").exists():
-        z = d / "platform.zip"
-        patcher.download(patcher.PLATFORM_ZIP, z)
-        with zipfile.ZipFile(z) as zf:
-            entry = next(n for n in zf.namelist() if n.endswith("/android.jar"))
-            (d / "android.jar").write_bytes(zf.read(entry))
-        z.unlink()
-    for exe in ("java", "javac"):
-        if not shutil.which(exe):
-            raise patcher.PatchError(f"{exe} not found, JDK 17+ is needed")
-    return d
+    # d8 и android.jar из vendor/: сборка мода тоже не требует сети
+    return patcher.ensure_tools()
 
 
 def main():

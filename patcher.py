@@ -4,7 +4,8 @@
     python3 patcher.py com.anthropic.claude_26100220.xapk -o Clawdio.apk
 
 Нужны Python 3.8+ и Java 17+. Инструменты (apktool, APKEditor, d8, uber-apk-signer,
-android.jar) скачиваются сами в ~/.cache/claude-mods при первом запуске.
+android.jar) лежат в vendor/ с контрольными суммами — сборка не требует сети. Если
+vendor/ нет, патчер скачает те же файлы в ~/.cache/claude-mods.
 
 Шаги:
   1. антисплит: XAPK/APKS/APKM -> один APK (APKEditor);
@@ -22,6 +23,9 @@ android.jar) скачиваются сами в ~/.cache/claude-mods при пе
 а не по именам. Если что-то не нашлось, патчер падает с понятной ошибкой.
 """
 import argparse
+import bisect
+import difflib
+import hashlib
 import json
 import os
 import pathlib
@@ -31,9 +35,18 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
+
+# Вывод — всегда в UTF-8. Консоль Windows по умолчанию cp1251/cp866 и падает на «→»,
+# «…» и любом другом символе вне кодовой страницы; из-за этого сборка обрывалась.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 # Файлы патчера — всегда в UTF-8. Без этого Windows читает их в кодовой странице
 # (cp1251/cp1252) и падает на любом не-ASCII символе.
@@ -92,13 +105,26 @@ def xml_text(value):
             .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             .replace("\n", "\\n"))
 
+# Инструменты сборки лежат в vendor/ — с ними проект собирается без сети и без
+# «скачается при первом запуске». Хеши те же, что у скачанных файлов: подмена
+# инструмента в репозитории или битая закачка не пройдут молча.
+VENDOR = HERE / "vendor"
 TOOLS = {
-    "apktool.jar": "https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar",
-    "APKEditor.jar": "https://github.com/REAndroid/APKEditor/releases/download/V1.4.5/APKEditor-1.4.5.jar",
-    "uber-apk-signer.jar": "https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/uber-apk-signer-1.3.0.jar",
-    "r8.jar": "https://dl.google.com/android/maven2/com/android/tools/r8/8.13.25/r8-8.13.25.jar",
+    "apktool.jar": ("https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar",
+                    "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423"),
+    "APKEditor.jar": ("https://github.com/REAndroid/APKEditor/releases/download/V1.4.5/APKEditor-1.4.5.jar",
+                      "71999a1f28cf6b457aff17c139436349cd6ea30d75a0f9cd52f07bd52e21897b"),
+    "uber-apk-signer.jar": ("https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/uber-apk-signer-1.3.0.jar",
+                            "e1299fd6fcf4da527dd53735b56127e8ea922a321128123b9c32d619bba1d835"),
+    "r8.jar": ("https://dl.google.com/android/maven2/com/android/tools/r8/8.13.25/r8-8.13.25.jar",
+               "0d4f2f68c4fcbc9434eff122f41feb6fb1d98efd2faa530cec1abacab1cea03d"),
 }
-PLATFORM_ZIP = "https://dl.google.com/android/repository/platform-35_r02.zip"
+PLATFORM_ZIP = ("https://dl.google.com/android/repository/platform-35_r02.zip",
+                "0988cacad01b38a18a47bac14a0695f246bc76c1b06c0eeb8eb0dc825ab0c8e0")
+# android.jar берётся из platform.zip один раз и дальше лежит рядом с остальными.
+ANDROID_JAR = "android.jar"
+ANDROID_SHA256 = "4566663c3876e022b4fa4ced8c8697c4ab1688267f090114fd92d027b32e619b"
+TOOL_NAMES = tuple(TOOLS) + (ANDROID_JAR,)
 
 # Ключ подписи не лежит в репозитории: с ним кто угодно подпишет «обновление», которое встанет поверх Clawdio.
 # Свой ключ — в keystore/ (в .gitignore) или по пути из CLAWDIO_KEYSTORE.
@@ -126,32 +152,77 @@ def run(cmd, **kw):
 # ---------------------------------------------------------------- инструменты
 
 def tools_dir():
-    d = pathlib.Path(os.environ.get("CLAUDE_MODS_TOOLS", pathlib.Path.home() / ".cache" / "claude-mods"))
+    """
+    Папка с инструментами. Порядок:
+
+    1. CLAUDE_MODS_TOOLS — явно указанная папка (свои инструменты, CI-кэш);
+    2. vendor/ рядом с patcher.py — так репозиторий собирается без сети;
+    3. ~/.cache/claude-mods — старый кэш; туда качается только то, чего нет в vendor/.
+    """
+    env = os.environ.get("CLAUDE_MODS_TOOLS")
+    if env:
+        d = pathlib.Path(env)
+    elif all((VENDOR / name).is_file() for name in TOOL_NAMES):
+        d = VENDOR
+    else:
+        d = pathlib.Path.home() / ".cache" / "claude-mods"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def download(url, dest):
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def download(url, dest, expected=None):
     log(f"  скачиваю {url.rsplit('/', 1)[-1]}")
     tmp = dest.with_suffix(dest.suffix + ".part")
     with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
         shutil.copyfileobj(r, f)
+    if expected and sha256(tmp) != expected.lower():
+        tmp.unlink()
+        raise PatchError(f"{dest.name}: контрольная сумма не совпала — файл повреждён или подменён")
     tmp.rename(dest)
 
 
+def _tool(d, name, url, expected):
+    """Файл инструмента: проверяет хеш, качает только если его нет в vendor/ и кэше."""
+    dest = d / name
+    if dest.exists():
+        if sha256(dest) == expected.lower():
+            return dest
+        if d == VENDOR:
+            raise PatchError(f"vendor/{name}: контрольная сумма не совпала — файл в репозитории повреждён")
+        log(f"  {name}: хеш не совпал, скачиваю заново")
+        dest.unlink()
+    download(url, dest, expected)
+    return dest
+
+
 def ensure_tools():
+    """Все инструменты на месте и целы. vendor/ делает это без сети."""
     d = tools_dir()
-    for name, url in TOOLS.items():
-        if not (d / name).exists():
-            download(url, d / name)
-    android_jar = d / "android.jar"
+    if d == VENDOR:
+        log(f"инструменты: vendor/ (в репозитории, скачивать нечего)")
+    for name, (url, expected) in TOOLS.items():
+        _tool(d, name, url, expected)
+    android_jar = d / ANDROID_JAR
     if not android_jar.exists():
         z = d / "platform.zip"
-        download(PLATFORM_ZIP, z)
+        download(PLATFORM_ZIP[0], z, PLATFORM_ZIP[1])
         with zipfile.ZipFile(z) as zf:
             entry = next(n for n in zf.namelist() if n.endswith("/android.jar"))
             android_jar.write_bytes(zf.read(entry))
         z.unlink()
+    if sha256(android_jar) != ANDROID_SHA256:
+        if d == VENDOR:
+            raise PatchError("vendor/android.jar: контрольная сумма не совпала")
+        android_jar.unlink()
+        raise PatchError("android.jar повреждён — удали его из кэша и запусти снова")
     for exe in ("java", "javac", "keytool"):
         if not shutil.which(exe):
             raise PatchError(f"не найден {exe}, нужна JDK 17+")
@@ -196,6 +267,34 @@ class Smali:
     def __init__(self, dec):
         self.dec = dec
         self.dirs = sorted(p for p in dec.iterdir() if p.is_dir() and p.name.startswith("smali"))
+        self._corpus = None
+        self._files = []
+        self._starts = []
+
+    def _index(self):
+        """
+        Один проход по всем .smali в память: на Windows нет grep, и поиск по 60 тысяч
+        файлов для каждого хука занимал десятки минут. Байтовый корпус ищется в C,
+        разделитель \\0 не даёт совпадению перейти из файла в файл.
+        """
+        if self._corpus is not None:
+            return
+        buf = bytearray()
+        starts, files = [], []
+        for d in self.dirs:
+            for p in sorted(d.rglob("*.smali")):
+                starts.append(len(buf))
+                files.append(p)
+                buf += p.read_bytes()
+                buf.append(0)
+        self._corpus, self._files, self._starts = buf, files, starts
+        log(f"  smali: {len(files)} файлов проиндексированы ({len(buf) // (1024 * 1024)} МБ)")
+
+    def reset(self):
+        """Сбросить байтовый индекс: после патчей файлы изменились, старый корпус устарел."""
+        self._corpus = None
+        self._files = []
+        self._starts = []
 
     def files_with(self, needle):
         """Файлы smali, где встречается строка needle."""
@@ -203,8 +302,14 @@ class Smali:
             r = subprocess.run(["grep", "-rlF", "--include=*.smali", needle, *map(str, self.dirs)],
                                stdout=subprocess.PIPE, text=True)
             return sorted(pathlib.Path(p) for p in r.stdout.splitlines())
+        self._index()
         b = needle.encode()
-        return sorted(p for d in self.dirs for p in d.rglob("*.smali") if b in p.read_bytes())
+        found = set()
+        i = self._corpus.find(b)
+        while i >= 0:
+            found.add(self._files[bisect.bisect_right(self._starts, i) - 1])
+            i = self._corpus.find(b, i + 1)
+        return sorted(found)
 
     def one_with(self, needle):
         files = self.files_with(needle)
@@ -257,12 +362,20 @@ def patch_layouts(dec):
 def patch_manifest(dec):
     m = dec / "AndroidManifest.xml"
     s = m.read_text()
+    # apktool 3 больше не умеет renameManifestPackage: меняем пакет в манифесте сами,
+    # aapt2 пересоберёт таблицу ресурсов уже с новым именем пакета
+    s = s.replace(f'package="{OLD_PACKAGE}"', f'package="{NEW_PACKAGE}"', 1)
     s = s.replace(f'android:authorities="{OLD_PACKAGE}.', f'android:authorities="{NEW_PACKAGE}.')
     s = s.replace(f"{OLD_PACKAGE}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
                   f"{NEW_PACKAGE}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
     s = s.replace(f'android:taskAffinity="{OLD_PACKAGE}.assist"', f'android:taskAffinity="{NEW_PACKAGE}.assist"')
     # метка приложения — @string/..., имя строки обфусцировано; ведёт на нашу clawdio_app_name
     s = re.sub(r'android:label="@string/[^"]+"', 'android:label="@string/clawdio_app_name"', s)
+    # вход — base APK из XAPK/APKS: без этого система требует отсутствующие ABI/density-сплиты
+    # и отказывается ставить собранный APK
+    s = re.sub(r'\s+android:(?:requiredSplitTypes|splitTypes)="[^"]*"', "", s)
+    s = s.replace(' android:isSplitRequired="true"', "")
+    s = re.sub(r'\s*<meta-data android:name="com\.android\.vending\.splits(?:\.required)?"[^>]*/>', "", s)
     activities = (
         '        <activity android:exported="true" android:label="Clawdio" '
         'android:name="cat.clawdio.mods.ModsActivity" '
@@ -300,19 +413,172 @@ def patch_manifest(dec):
     return app
 
 
-def patch_resources(dec):
+# ---------------------------------------------------------------- переводы
+
+TRANSLATIONS = HERE / "translations"
+
+
+def translation_entries(path, kind):
+    """Элементы strings.xml: [(имя, значение)]; у plurals и string-array значение — кортеж."""
+    if not path.exists():
+        return []
+    out = []
+    for e in ET.parse(path).getroot():
+        if e.tag != kind:
+            continue
+        if kind == "string":
+            out.append((e.get("name"), "".join(e.itertext())))
+        elif kind == "plurals":
+            out.append((e.get("name"), tuple((i.get("quantity") or "other", "".join(i.itertext())) for i in e)))
+        else:
+            out.append((e.get("name"), tuple("".join(i.itertext()) for i in e)))
+    return out
+
+
+def align_translations(en, fresh):
+    """
+    Номера строк перевода -> номера строк в новом APK.
+
+    Имена ресурсов у Claude обфусцированы (APKTOOL_DUMMYVAL_0x...), поэтому строки
+    сопоставляются по английскому тексту. Порядок ресурсов с обеих сторон — по имени
+    (ID), а старые имена входят в новые, так что это почти подпоследовательность:
+    difflib выравнивает её, а одиночные совпадения по значению добирают остальное.
+    Изменённые и удалённые строки остаются без перевода — их видно в счётчике.
+    """
+    pairs = {}
+    used = set()
+    sm = difflib.SequenceMatcher(None, [v for _, v in en], [v for _, v in fresh], autojunk=False)
+    for a, b, size in sm.get_matching_blocks():
+        for k in range(size):
+            pairs[a + k] = b + k
+            used.add(b + k)
+    by_value = {}
+    for j, (_, value) in enumerate(fresh):
+        by_value.setdefault(value, []).append(j)
+    for i, (_, value) in enumerate(en):
+        if i in pairs:
+            continue
+        free = [j for j in by_value.get(value, []) if j not in used]
+        if len(free) == 1:  # одинаковый текст в нескольких местах без выравнивания не трогаем
+            pairs[i] = free[0]
+            used.add(free[0])
+    return pairs
+
+
+def write_translation(path, strings, plurals, arrays):
+    root = ET.Element("resources")
+    for name, value in strings:
+        ET.SubElement(root, "string", {"name": name}).text = value
+    for name, items in plurals:
+        el = ET.SubElement(root, "plurals", {"name": name})
+        for quantity, value in items:
+            ET.SubElement(el, "item", {"quantity": quantity}).text = value
+    for name, items in arrays:
+        el = ET.SubElement(root, "string-array", {"name": name})
+        for value in items:
+            ET.SubElement(el, "item").text = value
+    if hasattr(ET, "indent"):  # Python 3.9+; на 3.8 файл всё равно соберётся
+        ET.indent(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(b'<?xml version="1.0" encoding="utf-8"?>\n')
+        f.write(ET.tostring(root, encoding="utf-8"))
+        f.write(b"\n")
+
+
+def one_language(dec, lang, en_strings, en_plurals, en_arrays):
+    """Собирает values-<lang> из translations/<lang> по английским строкам нового APK."""
+    src = TRANSLATIONS / lang
+    tr_strings = dict(translation_entries(src / "strings.xml", "string"))
+    tr_plurals = dict(translation_entries(src / "plurals.xml", "plurals"))
+    tr_arrays = dict(translation_entries(src / "arrays.xml", "string-array"))
+    fresh_strings = translation_entries(dec / "res/values/strings.xml", "string")
+    fresh_plurals = translation_entries(dec / "res/values/plurals.xml", "plurals")
+    fresh_arrays = translation_entries(dec / "res/values/arrays.xml", "string-array")
+
+    out, stale = {}, 0
+    pairs = align_translations(en_strings, fresh_strings)
+    for i, (name, _) in enumerate(en_strings):
+        if name not in tr_strings:
+            continue
+        j = pairs.get(i)
+        if j is None:
+            stale += 1
+            continue
+        if tr_strings[name] != "":
+            out[j] = tr_strings[name]
+    # одинаковый английский текст в разных местах («Готово», «Отмена», «Добавить»)
+    # переводится один раз, но примениться должен ко всем копиям: их больше, чем
+    # выровненных строк, и без этого часть кнопок оставалась английской
+    by_english = {}
+    for name, english in en_strings:
+        if tr_strings.get(name):
+            by_english.setdefault(english, tr_strings[name])
+    for j, (_, english) in enumerate(fresh_strings):
+        if j not in out and english in by_english:
+            out[j] = by_english[english]
+    out_strings = [(fresh_strings[j][0], value) for j, value in sorted(out.items())]
+    pairs = align_translations(en_plurals, fresh_plurals)
+    out_plurals = []
+    for i, (name, _) in enumerate(en_plurals):
+        j = pairs.get(i)
+        if name in tr_plurals and j is not None:
+            out_plurals.append((fresh_plurals[j][0], tr_plurals[name]))
+        elif name in tr_plurals:
+            stale += 1
+    pairs = align_translations(en_arrays, fresh_arrays)
+    out_arrays = []
+    for i, (name, _) in enumerate(en_arrays):
+        j = pairs.get(i)
+        if name in tr_arrays and j is not None:
+            out_arrays.append((fresh_arrays[j][0], tr_arrays[name]))
+        elif name in tr_arrays:
+            stale += 1
+
+    write_translation(dec / "res" / f"values-{lang}" / "strings.xml", out_strings, out_plurals, out_arrays)
+    log(f"  {lang}: строк {len(out_strings)}, множественных {len(out_plurals)}, "
+        f"массивов {len(out_arrays)}, устарело {stale}, "
+        f"без перевода {len(fresh_strings) - len(out_strings)}")
+    return len(out_strings)
+
+
+def patch_translations(dec):
+    """
+    Переводы Claude: строки с сервера и из ресурсов.
+
+    Имена ресурсов у Claude обфусцированы (R8 их вырезает), и values-ru со старыми
+    именами молча не находил ни одной строки — приложение оставалось английским.
+    Здесь перевод сопоставляется с новыми обфусцированными именами по английскому
+    тексту из translations/en, поэтому он переживает обновления Claude.
+    """
+    if not TRANSLATIONS.exists():
+        return 0
+    en = TRANSLATIONS / "en"
+    en_strings = translation_entries(en / "strings.xml", "string")
+    en_plurals = translation_entries(en / "plurals.xml", "plurals")
+    en_arrays = translation_entries(en / "arrays.xml", "string-array")
+    if not en_strings:
+        return 0
+    langs = [d.name for d in TRANSLATIONS.iterdir()
+             if d.is_dir() and d.name != "en" and re.fullmatch(r"[a-z]{2,3}", d.name)]
+    total = 0
+    for lang in sorted(langs):
+        total += one_language(dec, lang, en_strings, en_plurals, en_arrays)
+
+    # языки приложения: приложение само перечисляет их в настройках, а старый
+    # locales_config.xml (если он есть) должен знать о них
     lc = dec / "res/xml/locales_config.xml"
     if lc.exists():
         s = lc.read_text()
-        langs = [d.name[len("values-"):] for d in sorted((HERE / "res").glob("values-*"))
-                 if re.fullmatch(r"values-[a-z]{2,3}(-r[A-Z]{2})?", d.name)]  # только языки, не values-v31 и т. п.
         for lang in langs:
             if f'android:name="{lang}"' not in s:
-                s = sub_once(s, r"(\n\s*</locale-config>)", f'\n    <locale android:name="{lang}" />\\1', "locales_config")
+                s = sub_once(s, r"(\n\s*</locale-config>)",
+                             f'\n    <locale android:name="{lang}" />\\1', "locales_config")
         lc.write_text(s)
-    else:
-        # в новых версиях Claude файла нет: приложение само перечисляет языки
-        log("  locales_config.xml нет — пропускаю")
+    return total
+
+
+def patch_resources(dec):
 
     # метка приложения: манифест уже указывает на clawdio_app_name (см. patch_manifest),
     # значение есть в res/values/clawdio_strings.xml (идёт в APK после копирования res/)
@@ -331,7 +597,11 @@ def patch_resources(dec):
         for f in (HERE / "app-assets").iterdir():
             shutil.copy(f, dec / "assets/clawdio" / f.name)
 
-    # переводы (values-*) и свои ресурсы: виджет (layout, xml, drawable, color)
+    # переводы (translations/*) собираются в values-<язык> с учётом обфускации имён
+    patch_translations(dec)
+
+    # свои ресурсы: виджет (layout, xml, drawable, color). Языковые values-* с
+    # clawdio_strings.xml тоже отсюда: их имена наши, их обфускация не касается.
     for src in sorted(d for d in (HERE / "res").iterdir() if d.is_dir()):
         dst = dec / "res" / src.name
         dst.mkdir(exist_ok=True)
@@ -1478,6 +1748,7 @@ def patch_google_login(sm, dec, function0):
 def move_patched(sm):
     """Пропатченные классы — в отдельный smali_classesN. Основной classes.dex почти упирается в лимит
     65536 ссылок на методы, и каждая ссылка на код мода может его переполнить."""
+    sm.reset()  # индекс построен до патчей: в нём ещё нет ссылок на код мода
     new = sm.dec / f"smali_classes{len(sm.dirs) + 1}"
     moved = 0
     for f in sm.files_with("Lcat/clawdio/mods/"):
@@ -1544,6 +1815,8 @@ def build_dex(work, tools, names):
             body += f"    static final int[] {k} = {{{', '.join('0x%08X' % c for c in v)}}};\n"
         elif isinstance(v, dict):  # элемент -> поле
             body += f'    static final String {k} = "{",".join(f"{a}={b}" for a, b in v.items())}";\n'
+        elif isinstance(v, int):  # счётчик по умолчанию — код ждёт строку для parseInt
+            body += f'    static final String {k} = "{v}";\n'
         elif v.startswith("L") and v.endswith(";"):  # класс
             body += f'    static final String {k} = "{v[1:-1].replace("/", ".")}";\n'
         else:

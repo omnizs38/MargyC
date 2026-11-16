@@ -9,9 +9,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -66,15 +68,16 @@ public final class Fake {
             if (list == null || !"chat".equals(surface)) {
                 return list;
             }
-            List result = withoutFakes(list, ENTRY.get("id"));
-            remember(result);
+            List all = withoutFakes(list, ENTRY.get("id"));
+            remember(all);
+            List result = visibleOnly(all, ENTRY.get("id"));
             if (result.isEmpty()) {
                 return result;
             }
             Object first = result.get(0);
             List<Object> fakes = new ArrayList<Object>();
             for (Model m : all()) {
-                Object template = find(result, ENTRY.get("id"), m.base);
+                Object template = find(all, ENTRY.get("id"), m.base);
                 if (template == null) {
                     continue; // настоящей модели у аккаунта нет
                 }
@@ -107,10 +110,11 @@ public final class Fake {
             if (list == null) {
                 return null;
             }
-            List result = withoutFakes(list, OPTION.get("model"));
+            List all = withoutFakes(list, OPTION.get("model"));
+            List result = visibleOnly(all, OPTION.get("model"));
             List<Object> fakes = new ArrayList<Object>();
             for (Model m : all()) {
-                Object template = find(result, OPTION.get("model"), m.base);
+                Object template = find(all, OPTION.get("model"), m.base);
                 if (template == null) {
                     continue;
                 }
@@ -483,6 +487,61 @@ public final class Fake {
         } catch (Exception ignored) {
         }
         return map;
+    }
+
+    // ---- какие модели показывать в меню ----
+
+    /**
+     * Модели, спрятанные из меню выбора. Клиент строит список из ModelSelectorConfig и списка
+     * моделей организации — фильтруем оба, иначе спрятанная модель возвращается с другой стороны.
+     * Спрятать все нельзя: пустое меню сломало бы выбор модели, поэтому такой список не трогаем.
+     */
+    static synchronized Set<String> hidden() {
+        Set<String> out = new HashSet<String>();
+        try {
+            out.addAll(Mods.prefs().getStringSet("hidden_models", new HashSet<String>()));
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    static boolean isHidden(String id) {
+        return id != null && hidden().contains(id);
+    }
+
+    static void hide(String id, boolean hidden) throws Exception {
+        if (id == null) {
+            return;
+        }
+        Set<String> set = hidden();
+        if (hidden) {
+            set.add(id);
+        } else {
+            set.remove(id);
+        }
+        Mods.prefs().edit().putStringSet("hidden_models", set).apply();
+        log("model " + (hidden ? "hidden: " : "shown: ") + id);
+    }
+
+    static void showAll() throws Exception {
+        Mods.prefs().edit().remove("hidden_models").apply();
+        log("all models shown");
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static List visibleOnly(List list, String idField) throws Exception {
+        Set<String> hidden = hidden();
+        if (hidden.isEmpty()) {
+            return list;
+        }
+        List out = new ArrayList();
+        for (Object o : list) {
+            Object id = o == null ? null : field(o.getClass(), idField).get(o);
+            if (!(id instanceof String) || !hidden.contains(id)) {
+                out.add(o);
+            }
+        }
+        return out.isEmpty() ? list : out;
     }
 
     static String realName(String id) {
