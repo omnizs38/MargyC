@@ -404,11 +404,10 @@ def patch_manifest(dec):
 
     y = dec / "apktool.yml"
     t = y.read_text()
+    # apktool 3 больше не знает renameManifestPackage; пакет уже заменён в манифесте выше
     if "renameManifestPackage:" in t:
         t = re.sub(r"renameManifestPackage: .*", f"renameManifestPackage: {NEW_PACKAGE}", t)
-    else:  # apktool 2.12 не пишет пустой ключ
-        t = sub_once(t, r"(?m)^packageInfo:\n", f"packageInfo:\n  renameManifestPackage: {NEW_PACKAGE}\n", "apktool.yml")
-    y.write_text(t)
+        y.write_text(t)
     app = re.search(r'<application[^>]*?android:name="([^"]+)"', s).group(1)
     return app
 
@@ -435,27 +434,48 @@ def translation_entries(path, kind):
     return out
 
 
+def _norm_text(value):
+    """Текст для сравнения: apktool 3 иногда пишет U+FFFD вместо «’», а кавычки/тире
+    в разных сборках разные. Для поиска строки это одно и то же."""
+    table = str.maketrans({
+        "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u2032": "'",
+        "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+        "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00a0": " ", "\u2026": "...",
+    })
+    return re.sub(r"\s+", " ", value.replace("\ufffd", "").translate(table)).strip().casefold()
+
+
+def _norm_value(value):
+    if value and isinstance(value[0], tuple):  # plurals: порядок quantity в XML разный
+        return tuple(sorted(((q, _norm_text(t)) for q, t in value), key=lambda x: x[0]))
+    return tuple(_norm_text(t) for t in value)  # string-array: просто элементы
+
+
 def align_translations(en, fresh):
     """
     Номера строк перевода -> номера строк в новом APK.
 
-    Имена ресурсов у Claude обфусцированы (APKTOOL_DUMMYVAL_0x...), поэтому строки
-    сопоставляются по английскому тексту. Порядок ресурсов с обеих сторон — по имени
-    (ID), а старые имена входят в новые, так что это почти подпоследовательность:
-    difflib выравнивает её, а одиночные совпадения по значению добирают остальное.
-    Изменённые и удалённые строки остаются без перевода — их видно в счётчике.
+    Имена ресурсов у Claude обфусцированы (APKTOOL_DUMMYVAL_0x... / APKTOOL_RENAMED_0x...),
+    поэтому строки сопоставляются по английскому тексту. Порядок ресурсов с обеих
+    сторон — по имени (ID), а старые имена входят в новые, так что это почти
+    подпоследовательность: difflib выравнивает её, а одиночные совпадения по значению
+    добирают остальное. Изменённые и удалённые строки остаются без перевода.
     """
     pairs = {}
     used = set()
-    sm = difflib.SequenceMatcher(None, [v for _, v in en], [v for _, v in fresh], autojunk=False)
+    key = (lambda v: _norm_text(v)) if en and isinstance(en[0][1], str) else (
+        lambda v: _norm_value(v))
+    old = [key(v) for _, v in en]
+    new = [key(v) for _, v in fresh]
+    sm = difflib.SequenceMatcher(None, old, new, autojunk=False)
     for a, b, size in sm.get_matching_blocks():
         for k in range(size):
             pairs[a + k] = b + k
             used.add(b + k)
     by_value = {}
-    for j, (_, value) in enumerate(fresh):
+    for j, value in enumerate(new):
         by_value.setdefault(value, []).append(j)
-    for i, (_, value) in enumerate(en):
+    for i, value in enumerate(old):
         if i in pairs:
             continue
         free = [j for j in by_value.get(value, []) if j not in used]
@@ -513,10 +533,10 @@ def one_language(dec, lang, en_strings, en_plurals, en_arrays):
     by_english = {}
     for name, english in en_strings:
         if tr_strings.get(name):
-            by_english.setdefault(english, tr_strings[name])
+            by_english.setdefault(_norm_text(english), tr_strings[name])
     for j, (_, english) in enumerate(fresh_strings):
-        if j not in out and english in by_english:
-            out[j] = by_english[english]
+        if j not in out and _norm_text(english) in by_english:
+            out[j] = by_english[_norm_text(english)]
     out_strings = [(fresh_strings[j][0], value) for j, value in sorted(out.items())]
     pairs = align_translations(en_plurals, fresh_plurals)
     out_plurals = []
