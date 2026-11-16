@@ -1,1 +1,10 @@
-{}
+{
+  "release": {
+    "version": "1.4.1",
+    "beta": 0,
+    "apk": "Clawdio.apk",
+    "notes": "Clawdio 1.4.1: рабочий русский перевод на Claude 1.261106.19, скрытие лишних моделей в меню, офлайн-сборка из vendor/",
+    "sha256": "38304168ebacebc8cc059cbc7709c8af023497cd77bb8ae2b30a02fdc1af2c8e",
+    "size": 67647966
+  }
+}
