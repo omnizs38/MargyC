@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="clawdio_widget_description">Сәлемдесу мен бүгінгі хабарламалары бар Clawd</string>
+    <string name="clawdio_mods">Модтар</string>
 </resources>

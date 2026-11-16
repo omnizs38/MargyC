@@ -726,6 +726,31 @@ def patch_icons(dec):
     log(f"  иконки: {len(ICONS)} вариантов")
 
 
+def add_mods_launcher(dec):
+    """
+    Запасной вход в моды: в новых сборках Claude боковое меню переделали, и хук
+    пункта не находит старый DrawerTabConfig. Тогда добавляем отдельный ярлык
+    «Моды» на рабочий стол — он ведёт в ModsActivity и не зависит от smali.
+    """
+    m = dec / "AndroidManifest.xml"
+    s = m.read_text()
+    if "cat.clawdio.mods.mods" in s:
+        return
+    alias = (
+        '\n        <activity-alias android:name="cat.clawdio.mods.mods" '
+        'android:targetActivity="cat.clawdio.mods.ModsActivity" android:exported="true" '
+        'android:icon="@mipmap/clawdio_icon_clawdio" android:roundIcon="@mipmap/clawdio_icon_clawdio" '
+        'android:label="@string/clawdio_mods">\n'
+        '            <intent-filter>\n'
+        '                <action android:name="android.intent.action.MAIN"/>\n'
+        '                <category android:name="android.intent.category.LAUNCHER"/>\n'
+        '            </intent-filter>\n'
+        '        </activity-alias>')
+    s = s.replace("</application>", alias + "\n    </application>", 1)
+    m.write_text(s)
+    log("  боковое меню не найдено — добавлен ярлык «Моды» на рабочий стол")
+
+
 def patch_install_source(sm):
     """getInstallSourceInfo("com.anthropic.claude") падает в чужом пакете."""
     n = 0
@@ -894,15 +919,16 @@ def patch_fonts(sm):
     fb = re.compile(r"invoke-virtual \{([^}]*)\}, " + re.escape(cfb)
                     + r"->(setStyle\(Landroid/graphics/fonts/FontStyle;\)" + re.escape(cfb) + r"|build\(\)Landroid/graphics/Typeface;)")
     main = 0
-    for f in sm.files_with("Landroid/graphics/fonts/Font$Builder;-><init>(Ljava/nio/ByteBuffer;)V"):
+    # CustomFallbackBuilder может быть в другом файле, чем Font$Builder(ByteBuffer) —
+    # в 1.261106.19 это так; патчим по самим вызовам, а не по соседству с конструктором
+    for f in sm.files_with(cfb + "->build()"):
         s = f.read_text()
-        if cfb + "->build()" not in s:
-            continue
         s, n = fb.subn(lambda m: f"invoke-static {{{m.group(1)}}}, {MOD}Font;->" + (
             f"style({cfb}Landroid/graphics/fonts/FontStyle;){cfb}" if m.group(2).startswith("setStyle")
             else f"fallback({cfb})Landroid/graphics/Typeface;"), s)
         main += n
-        f.write_text(s)
+        if n:
+            f.write_text(s)
     if main < 2:
         raise PatchError(f"шрифты: CustomFallbackBuilder {main}")
     return ctors, calls + main
@@ -1968,6 +1994,8 @@ def main():
             log("  ВНИМАНИЕ: сборка с ограничениями — часть возможностей мода не работает:")
             for t, e in broken:
                 log(f"    - {t}")
+        if any(t == "пункт в меню" for t, _ in broken):
+            add_mods_launcher(dec)
         palettes = names
         log(f"  перенесено пропатченных классов: {move_patched(sm)}")
         limit_abi(dec, a.abi)

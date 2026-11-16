@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="clawdio_widget_description">Clawd з прывітаннем і паведамленнямі за сёння</string>
+    <string name="clawdio_mods">Моды</string>
 </resources>

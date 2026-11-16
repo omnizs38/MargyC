@@ -2,4 +2,5 @@
 <resources>
     <string name="clawdio_widget_description">Clawd with a greeting and today\'s messages</string>
     <string name="clawdio_app_name">Clawdio</string>
+    <string name="clawdio_mods">Mods</string>
 </resources>
