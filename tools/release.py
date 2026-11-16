@@ -270,7 +270,7 @@ def check(a):
     for key, entry in (("release", release), ("beta", beta)):
         if not entry:
             continue
-        url = f"https://raw.githubusercontent.com/{repo}/{branch}/{entry.get('apk', '')}"
+        url = f"https://raw.githubusercontent.com/{repo}/{branch}/{entry.get('apk', '')}?t={int(time.time())}"
         try:
             with urllib.request.urlopen(url, timeout=120) as r:
                 h = hashlib.sha256()
