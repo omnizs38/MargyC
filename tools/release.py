@@ -224,13 +224,12 @@ def create_release(cfg, repo, version, beta, notes, apk, asset_name, digest):
 
     upload = f"https://uploads.github.com/repos/{repo}/releases/{release['id']}/assets?name={asset_name}"
     data = pathlib.Path(apk).read_bytes()
-    boundary = "----clawdio"
-    head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"asset\"; filename=\"{asset_name}\"\r\n"
-            "Content-Type: application/vnd.android.package-archive\r\n\r\n").encode("utf-8")
-    tail = f"\r\n--{boundary}--\r\n".encode("utf-8")
-    req = urllib.request.Request(upload, data=head + data + tail, headers={
+    # именно байты APK, без multipart: с ручной multipart-обёрткой GitHub сохранял
+    # границы формы в начале и в конце файла, и APK с релиза не устанавливался
+    req = urllib.request.Request(upload, data=data, headers={
         "Authorization": f"Bearer {token}",
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Length": str(len(data)),
         "User-Agent": "clawdio-release",
     })
     try:
