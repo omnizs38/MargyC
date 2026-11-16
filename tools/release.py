@@ -89,8 +89,11 @@ def read_channel(branch, repo):
         text = None
         api = f"https://api.github.com/repos/{repo}/contents/{name}?ref={branch}"
         try:
-            req = urllib.request.Request(api, headers={"User-Agent": "Clawdio release",
-                                                       "Accept": "application/vnd.github.raw"})
+            headers = {"User-Agent": "Clawdio release", "Accept": "application/vnd.github.raw"}
+            token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            req = urllib.request.Request(api, headers=headers)
             with urllib.request.urlopen(req, timeout=30) as r:
                 text = r.read().decode("utf-8-sig")
         except Exception:
@@ -270,15 +273,26 @@ def check(a):
     for key, entry in (("release", release), ("beta", beta)):
         if not entry:
             continue
-        url = f"https://raw.githubusercontent.com/{repo}/{branch}/{entry.get('apk', '')}?t={int(time.time())}"
-        try:
-            with urllib.request.urlopen(url, timeout=120) as r:
-                h = hashlib.sha256()
-                for block in iter(lambda: r.read(1 << 20), b""):
-                    h.update(block)
-            digest = h.hexdigest()
-        except Exception as e:
-            problems.append(f"{key}: не скачался APK ({e})")
+        api_asset = f"https://api.github.com/repos/{repo}/contents/{entry.get('apk', '')}?ref={branch}"
+        raw_asset = f"https://raw.githubusercontent.com/{repo}/{branch}/{entry.get('apk', '')}?t={int(time.time())}"
+        digest = None
+        last = None
+        for url in (api_asset, raw_asset):
+            try:
+                headers = {"User-Agent": "Clawdio release", "Accept": "application/vnd.github.raw"}
+                token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+                if token and url == api_asset:
+                    headers["Authorization"] = f"Bearer {token}"
+                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as r:
+                    h = hashlib.sha256()
+                    for block in iter(lambda: r.read(1 << 20), b""):
+                        h.update(block)
+                digest = h.hexdigest()
+                break
+            except Exception as e:
+                last = e
+        if digest is None:
+            problems.append(f"{key}: не скачался APK ({last})")
             continue
         if entry.get("sha256") and entry["sha256"] != digest:
             problems.append(f"{key}: хеш APK не совпадает с version.json")

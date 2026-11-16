@@ -22,6 +22,8 @@ jobs:
           python-version: '3.11'
 
       - name: Канал совпадает с исходниками
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/release.py check
 
   upstream:

@@ -579,9 +579,10 @@ def one_language(dec, lang, en_strings, en_plurals, en_arrays):
     write_path = dec / "res" / f"values-{lang}" / "strings.xml"
     # В XAPK у Claude уже может быть свой values-<lang> (config.ru.apk): сохраняем
     # его строки, которых нет в нашем переводе, и заменяем только известные ключи.
-    old_strings = dict(translation_entries(write_path, "string")) if write_path.exists() else {}
-    old_plurals = dict(translation_entries(write_path, "plurals")) if write_path.exists() else {}
-    old_arrays = dict(translation_entries(write_path, "string-array")) if write_path.exists() else {}
+    write_dir = dec / "res" / f"values-{lang}"
+    old_strings = dict(translation_entries(write_dir / "strings.xml", "string")) if (write_dir / "strings.xml").exists() else {}
+    old_plurals = dict(translation_entries(write_dir / "plurals.xml", "plurals")) if (write_dir / "plurals.xml").exists() else {}
+    old_arrays = dict(translation_entries(write_dir / "arrays.xml", "string-array")) if (write_dir / "arrays.xml").exists() else {}
     merged_strings = dict(old_strings)
     for name, value in out_strings:
         merged_strings[name] = value
@@ -591,8 +592,12 @@ def one_language(dec, lang, en_strings, en_plurals, en_arrays):
     merged_arrays = dict(old_arrays)
     for name, value in out_arrays:
         merged_arrays[name] = value
-    write_translation(write_path, list(merged_strings.items()), list(merged_plurals.items()),
-                      list(merged_arrays.items()))
+    # strings, plurals и arrays — в отдельные файлы: в XAPK у Claude уже есть
+    # values-<lang>/plurals.xml и arrays.xml, и дубли в strings.xml aapt2 отвергает
+    write_dir = dec / "res" / f"values-{lang}"
+    write_translation(write_dir / "strings.xml", list(merged_strings.items()), [], [])
+    write_translation(write_dir / "plurals.xml", [], list(merged_plurals.items()), [])
+    write_translation(write_dir / "arrays.xml", [], [], list(merged_arrays.items()))
     log(f"  {lang}: строк {len(merged_strings)}, множественных {len(merged_plurals)}, "
         f"массивов {len(merged_arrays)}, устарело {stale}, "
         f"без перевода {len(fresh_strings) - len(out_strings)}")
