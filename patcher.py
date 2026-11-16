@@ -415,6 +415,27 @@ def patch_manifest(dec):
 # ---------------------------------------------------------------- переводы
 
 TRANSLATIONS = HERE / "translations"
+_SEMANTIC = {}
+
+
+def semantic_name(dec, key):
+    """
+    Имя ресурса в новой сборке по старому смысловому имени. R8 переименовал ресурсы
+    в APKTOOL_RENAMED_0x..., и public.xml больше не знает add_to_home/session_menu_share.
+    Английский текст в translations/en остаётся прежним, поэтому берём то же
+    выравнивание, что и для переводов, и получаем новое имя ресурса.
+    """
+    cache = _SEMANTIC.get(str(dec))
+    if cache is None:
+        en = translation_entries(TRANSLATIONS / "en" / "strings.xml", "string")
+        fresh = translation_entries(dec / "res/values/strings.xml", "string")
+        pairs = align_translations(en, fresh)
+        cache = {}
+        for i, (name, _) in enumerate(en):
+            if i in pairs:
+                cache[name] = fresh[pairs[i]][0]
+        _SEMANTIC[str(dec)] = cache
+    return cache.get(key)
 
 
 def translation_entries(path, kind):
@@ -1625,7 +1646,8 @@ def patch_chat_menu(sm, dec):
     public = (dec / "res/values/public.xml").read_text()
 
     # ---- чат ----
-    m = re.search(r'name="add_to_home" id="(0x[0-9a-f]+)"', public)
+    home = semantic_name(dec, "add_to_home") or "add_to_home"
+    m = re.search(r'name="' + re.escape(home) + r'" id="(0x[0-9a-f]+)"', public)
     candidates, composer_type = [], None
     if m:
         rid = m.group(1)
@@ -1674,7 +1696,8 @@ def patch_chat_menu(sm, dec):
     log(f"  меню чата: пункт .md {'добавлен' if hooked else 'не добавлен (не нашёл место)'}")
 
     # ---- Code ----
-    m = re.search(r'name="session_menu_share" id="(0x[0-9a-f]+)"', public)
+    share = semantic_name(dec, "session_menu_share") or "session_menu_share"
+    m = re.search(r'name="' + re.escape(share) + r'" id="(0x[0-9a-f]+)"', public)
     code = 0
     if m and composer_type:
         rid = m.group(1)
@@ -1750,7 +1773,9 @@ def session_names(sm):
 
 def patch_google_login(sm, dec, function0):
     """Кнопка «Продолжить с Google»: вместо входа (он не работает в чужом пакете) окно с подсказкой."""
-    m = re.search(r'name="login_welcome_google_login_with_google_button" id="(0x[0-9a-f]+)"',
+    google = semantic_name(dec, "login_welcome_google_login_with_google_button") \
+        or "login_welcome_google_login_with_google_button"
+    m = re.search(r'name="' + re.escape(google) + r'" id="(0x[0-9a-f]+)"',
                   (dec / "res/values/public.xml").read_text())
     if not m:
         raise PatchError("нет строки login_welcome_google_login_with_google_button")
