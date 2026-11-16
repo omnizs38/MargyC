@@ -16,6 +16,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -77,15 +78,31 @@ def build(a):
 # ---------------------------------------------------------------- публикация
 
 def read_channel(branch, repo):
-    """Что уже лежит в ветке канала."""
+    """Что уже лежит в ветке канала.
+
+    Сначала API GitHub: raw.githubusercontent кэширует файлы и отдаёт прошлую
+    версию, из-за чего publish теряет вторую запись, а check не видит свежий APK.
+    Если API не ответил — raw с меткой времени.
+    """
     out = {}
     for name in CHANNEL_FILES:
-        url = f"https://raw.githubusercontent.com/{repo}/{branch}/{name}"
+        text = None
+        api = f"https://api.github.com/repos/{repo}/contents/{name}?ref={branch}"
         try:
-            with urllib.request.urlopen(url, timeout=20) as r:
-                out[name] = r.read().decode("utf-8-sig")  # utf-8-sig: с BOM и без него
+            req = urllib.request.Request(api, headers={"User-Agent": "Clawdio release",
+                                                       "Accept": "application/vnd.github.raw"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                text = r.read().decode("utf-8-sig")
         except Exception:
-            out[name] = None
+            pass
+        if text is None:
+            url = f"https://raw.githubusercontent.com/{repo}/{branch}/{name}?t={int(time.time())}"
+            try:
+                with urllib.request.urlopen(url, timeout=20) as r:
+                    text = r.read().decode("utf-8-sig")  # utf-8-sig: с BOM и без него
+            except Exception:
+                text = None
+        out[name] = text
     return out
 
 
