@@ -576,11 +576,27 @@ def one_language(dec, lang, en_strings, en_plurals, en_arrays):
         elif name in tr_arrays:
             stale += 1
 
-    write_translation(dec / "res" / f"values-{lang}" / "strings.xml", out_strings, out_plurals, out_arrays)
-    log(f"  {lang}: строк {len(out_strings)}, множественных {len(out_plurals)}, "
-        f"массивов {len(out_arrays)}, устарело {stale}, "
+    write_path = dec / "res" / f"values-{lang}" / "strings.xml"
+    # В XAPK у Claude уже может быть свой values-<lang> (config.ru.apk): сохраняем
+    # его строки, которых нет в нашем переводе, и заменяем только известные ключи.
+    old_strings = dict(translation_entries(write_path, "string")) if write_path.exists() else {}
+    old_plurals = dict(translation_entries(write_path, "plurals")) if write_path.exists() else {}
+    old_arrays = dict(translation_entries(write_path, "string-array")) if write_path.exists() else {}
+    merged_strings = dict(old_strings)
+    for name, value in out_strings:
+        merged_strings[name] = value
+    merged_plurals = dict(old_plurals)
+    for name, value in out_plurals:
+        merged_plurals[name] = value
+    merged_arrays = dict(old_arrays)
+    for name, value in out_arrays:
+        merged_arrays[name] = value
+    write_translation(write_path, list(merged_strings.items()), list(merged_plurals.items()),
+                      list(merged_arrays.items()))
+    log(f"  {lang}: строк {len(merged_strings)}, множественных {len(merged_plurals)}, "
+        f"массивов {len(merged_arrays)}, устарело {stale}, "
         f"без перевода {len(fresh_strings) - len(out_strings)}")
-    return len(out_strings)
+    return len(merged_strings)
 
 
 def patch_translations(dec):
@@ -2030,7 +2046,10 @@ def main():
                 log(f"    - {t}")
         if any(t == "пункт в меню" for t, _ in broken):
             add_mods_launcher(dec)
-        palettes = names
+        palettes = dict(names)
+        # в новой сборке Claude хук тем может не найтись — не падаем на журнале
+        palettes.setdefault("DARK_PALETTE", [])
+        palettes.setdefault("LIGHT_PALETTE", [])
         log(f"  перенесено пропатченных классов: {move_patched(sm)}")
         limit_abi(dec, a.abi)
         for k, v in names.items():

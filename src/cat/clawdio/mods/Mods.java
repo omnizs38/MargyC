@@ -11,7 +11,7 @@ import java.lang.reflect.Method;
 /** Общие штуки мода: открыть экран модов, настройки, язык приложения, перезапуск. */
 public final class Mods {
     static final String TAG = "Clawdio";
-    static final String VERSION = "1.4.1"; // версия Clawdio, не Claude
+    static final String VERSION = "1.4.2"; // версия Clawdio, не Claude
     /** Номер беты этой версии, 0 — релиз. */
     static final int BETA = 0;
     /**

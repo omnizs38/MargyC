@@ -2788,7 +2788,7 @@
     <string name="login_welcome_email_placeholder">Введите адрес эл. почты</string>
     <string name="login_welcome_email_submit_a11y">Продолжить с эл. почтой</string>
     <string name="login_welcome_google_login_error">Не удалось войти через Google</string>
-    <string name="login_welcome_google_login_with_google_button">Продолжить с Google</string>
+    <string name="login_welcome_google_login_with_google_button">Вход через Google недоступен — используйте почту</string>
     <string name="login_welcome_login_with_or">ИЛИ</string>
     <string name="login_welcome_login_with_or_a11y">Или</string>
     <string name="login_welcome_no_organization_notice">"Этот аккаунт не состоит в организации, которой доступен Claude.
