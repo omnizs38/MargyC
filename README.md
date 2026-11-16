@@ -19,6 +19,11 @@ Russian UI, your own themes, meme models, a Clawd pet on the composer and mods y
 <img src="https://img.shields.io/badge/arch-arm64--v8a-555?style=flat-square" alt="arm64-v8a">
 <img src="https://img.shields.io/badge/license-GPL--3.0-555?style=flat-square" alt="GPL-3.0">
 
+> **Compatibility note.** 1.4.2 is built on Claude **1.261113.19**. Its new Compose UI is
+> heavily obfuscated: the Mods screen opens from the in-app Clawd button or the app icon, and
+> meme models, custom themes and the account streamer are unavailable in 1.4.2. The 1.4.1 build
+> on Claude 1.261106.19 keeps those features; both install with the same signing key.
+
 <br><br>
 
 <img src="assets/screenshot-code.jpg" width="300" alt="Clawd and a new Code session">
