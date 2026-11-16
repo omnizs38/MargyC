@@ -1813,9 +1813,18 @@ def limit_abi(dec, abi):
     if abi == "all":
         return
     lib = dec / "lib"
-    if not lib.exists():
-        log("  нативных библиотек нет, ограничивать архитектуру нечего")
-        return
+    if not lib.exists() or not any(lib.iterdir()):
+        # вход — base APK из XAPK/APKS: ABI-сплита с .so в нём нет. Кладём свои
+        # arm64-библиотеки, иначе приложение упадёт на System.loadLibrary.
+        src = HERE / "native-libs" / abi
+        if src.exists():
+            (dec / "lib").mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dec / "lib" / abi)
+            log(f"  в APK нет нативных библиотек — добавил {abi} из native-libs/")
+            lib = dec / "lib"
+        else:
+            log("  нативных библиотек нет, ограничивать архитектуру нечего")
+            return
     if not (lib / abi).exists():
         dirs = [d.name for d in lib.iterdir() if d.is_dir()]
         if dirs:

@@ -2,14 +2,14 @@ package cat.clawdio.mods;
 
 import android.app.Activity;
 import android.app.Application;
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
-import android.view.Gravity;
+import android.os.Looper;import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -148,7 +148,9 @@ final class Overlay {
         private final TextView count;
         private final Particles particles;
         private final ImageView button;
+        private final ObjectAnimator bob;
         private float downX, downY, startX, startY;
+        private long downAt;
         private boolean dragged, placed;
         private View host;
         private boolean running;
@@ -201,6 +203,7 @@ final class Overlay {
                         downY = e.getRawY();
                         startX = button.getX();
                         startY = button.getY();
+                        downAt = System.currentTimeMillis();
                         dragged = false;
                         return true;
                     case android.view.MotionEvent.ACTION_MOVE:
@@ -215,7 +218,11 @@ final class Overlay {
                         return true;
                     case android.view.MotionEvent.ACTION_UP:
                         if (!dragged) {
-                            Mods.open();
+                            if (System.currentTimeMillis() - downAt > 450) {
+                                chatMenu();
+                            } else {
+                                Mods.open();
+                            }
                         }
                         return true;
                     default:
@@ -233,11 +240,30 @@ final class Overlay {
                 }
                 button.setVisibility(buttonOn() ? VISIBLE : GONE);
             });
+            bob = ObjectAnimator.ofFloat(button, "translationY", 0f, -dp(4));
+            bob.setDuration(1100);
+            bob.setRepeatCount(ObjectAnimator.INFINITE);
+            bob.setRepeatMode(ObjectAnimator.REVERSE);
+        }
+
+        /** Долгое нажатие на Clawd: экспорт и поиск последнего диалога без меню чата. */
+        private void chatMenu() {
+            Ui ui = new Ui(activity);
+            ui.new Sheet(L.t("Clawdio"))
+                    .button(L.t("Найти в чате"), false,
+                            () -> new Thread(Export::searchLatest, "Clawdio search").start())
+                    .button(L.t("Скачать .md"), true,
+                            () -> new Thread(Export::saveLatest, "Clawdio export").start())
+                    .button(L.t("Моды"), false, Mods::open)
+                    .show();
         }
 
         void start() {
             particles.setKind(effectiveSeason());
             button.setVisibility(buttonOn() ? VISIBLE : GONE);
+            if (buttonOn() && !bob.isStarted()) {
+                bob.start();
+            }
             if (!running) {
                 running = true;
                 handler.post(tick);
@@ -248,6 +274,7 @@ final class Overlay {
             running = false;
             handler.removeCallbacks(tick);
             particles.setKind("off");
+            bob.cancel();
         }
 
         private void poll() {

@@ -39,8 +39,7 @@ final class L {
 
     static {
         // экран модов
-        put("Моды", "Mods");
-        put("Язык", "Language");
+        put("Моды", "Mods");        put("Язык", "Language");
         put("Оформление", "Appearance");
         put("Питомец", "Pet");
         put("Мемные модели", "Meme models");
@@ -412,6 +411,7 @@ final class L {
         put("Мой Claude в цифрах (Clawdio):", "My Claude in numbers (Clawdio):");
         put("Мята", "Mint");
         put("Над полем ввода видно, сколько символов в сообщении.", "Shows above the message field how many characters the message has.");
+        put("Скачать .md", "Download .md");
         put("Найти в чате", "Find in chat");
         put("Насколько приглушить обои, чтобы текст читался.", "How much to dim the wallpaper so the text stays readable.");
         put("Ночь", "Night");

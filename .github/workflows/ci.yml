@@ -27,6 +27,9 @@ jobs:
       - name: Инструменты сборки на месте и не подменены
         run: cd vendor && sha256sum -c SHA256SUMS
 
+      - name: Нативные библиотеки на месте и не подменены
+        run: cd native-libs && sha256sum -c SHA256SUMS
+
       - name: Переводы и плейсхолдеры
         run: python3 tools/check_translations.py
 

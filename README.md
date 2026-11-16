@@ -131,6 +131,7 @@ server*. See [docs/SELF-HOST.md](docs/SELF-HOST.md).
 |---|---|---|
 | [`config.json`](config.json) | brand, package, update channel, author and donation details of this build |
 | [`vendor`](vendor) | build tools (apktool, APKEditor, d8, uber-apk-signer, android.jar) with SHA-256 checksums — the build works offline |
+| [`native-libs`](native-libs) | arm64-v8a libraries used when the input is a split base without an ABI split |
 | [`patcher.py`](patcher.py) | XAPK → merged APK → manifest, resource and smali patches → build → sign |
 | [`src/cat/clawdio/mods`](src/cat/clawdio/mods) | the mod itself: Mods screen, themes, prompt, meme models, Clawd, plugin loader |
 | [`src/cat/clawdio/mods/api`](src/cat/clawdio/mods/api) | the API for custom mods |
